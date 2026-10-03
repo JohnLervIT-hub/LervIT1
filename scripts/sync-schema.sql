@@ -1772,3 +1772,12 @@ ALTER TABLE bookings
 ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS piece_count_evidence_photo_url   text      DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS piece_count_evidence_uploaded_at timestamp DEFAULT NULL;
+
+-- ===== 0040: piece-count dispute window =====
+-- IF NOT EXISTS is mandatory here: this file runs on every boot.
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS piece_count_dispute_status             text      DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS piece_count_dispute_opened_at          timestamp DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS piece_count_dispute_resolved_at        timestamp DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS piece_count_dispute_customer_photo_url text      DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS piece_count_dispute_resolution         text      DEFAULT NULL;

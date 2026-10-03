@@ -89,9 +89,61 @@ import {
 } from "@shared/pricing";
 import { FURNITURE_DATABASE } from "@shared/furniture-database";
 import { scaledVolume, getMinPieceCount } from "@shared/volume-utils";
+import {
+  PIECE_COUNT_DISPUTE_STATUS,
+  PIECE_COUNT_DISPUTE_RESOLUTION,
+  PIECE_COUNT_DISPUTE_WINDOW_MS,
+} from "@shared/schema";
 
 /** Mover-cancel reason that triggers the 50% piece-count discrepancy rule. */
 const PIECE_COUNT_DISCREPANCY_REASON = 'piece_count_discrepancy';
+
+/**
+ * Ops mailbox for piece-count claims. There is no OPS_EMAIL in this codebase
+ * today, so it falls back to the support address already used by the
+ * mover-cancel customer email.
+ */
+const OPS_EMAIL = process.env.OPS_EMAIL || 'support@lervit.com';
+
+/** One ops email for every outcome of a piece-count claim. */
+async function notifyOpsPieceCountClaim(opts: {
+  bookingId: string;
+  outcome: string;
+  declaredPieceCount: number | null;
+  actualPieceCount: number | null;
+  moverPhotoUrl: string | null;
+  customerPhotoUrl?: string | null;
+  payout: string | number | null;
+  resolution?: string | null;
+}): Promise<void> {
+  const rows: [string, unknown][] = [
+    ['Booking', opts.bookingId],
+    ['Outcome', opts.outcome],
+    ['Customer declared', opts.declaredPieceCount ?? '(never declared)'],
+    ["Mover's count on arrival", opts.actualPieceCount ?? '(none)'],
+    ['Recorded payout', opts.payout ?? '(none)'],
+    ['Resolution', opts.resolution ?? '(pending ops)'],
+    ['Mover photo', opts.moverPhotoUrl ?? '(none)'],
+    ['Customer photo', opts.customerPhotoUrl ?? '(none)'],
+  ];
+  try {
+    await notificationService.sendEmail({
+      to: OPS_EMAIL,
+      subject: `Piece-count claim ${opts.outcome} — booking ${opts.bookingId}`,
+      body: `<p>Piece-count discrepancy claim update.</p><ul>${rows
+        .map(([k, v]) => `<li><strong>${k}:</strong> ${he.escape(String(v))}</li>`)
+        .join('')}</ul>`,
+      type: 'booking_confirmation',
+    });
+  } catch (err) {
+    // Never let the ops email fail the customer's action.
+    logEvent.error(
+      'piece_count_ops_email_failed',
+      err instanceof Error ? err : new Error('email error'),
+      { bookingId: opts.bookingId, outcome: opts.outcome },
+    );
+  }
+}
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
@@ -5756,9 +5808,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const booking = await storage.getBooking(bookingId);
         if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-        const mover = await storage.getMoverByUserId(user.id);
-        if (!mover || booking.moverId !== mover.id) {
-          return res.status(403).json({ error: "You are not assigned to this booking" });
+        // Either side of the claim may upload here: the mover's arrival photo and
+        // the customer's rebuttal are the same kind of artifact and belong on the
+        // same authenticated, booking-scoped path.
+        const isCustomer = booking.customerId === user.id;
+        if (!isCustomer) {
+          const mover = await storage.getMoverByUserId(user.id);
+          if (!mover || booking.moverId !== mover.id) {
+            return res
+              .status(403)
+              .json({ error: "You are not a party to this booking" });
+          }
         }
 
         const objectStorageService = new ObjectStorageService();
@@ -5781,7 +5841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           logEvent.error(
             'piece_count_evidence_upload_failed',
             uploadError instanceof Error ? uploadError : new Error('upload error'),
-            { bookingId, moverId: mover.id },
+            { bookingId, userId: user.id },
           );
           // Local fallback, same as /api/upload/images: a storage outage must not
           // block a mover who is standing in front of the wrong load.
@@ -5790,7 +5850,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         logEvent.booking('piece_count_evidence_uploaded', {
           bookingId,
-          moverId: mover.id,
+          uploadedBy: isCustomer ? 'customer' : 'mover',
+          userId: user.id,
           url,
         });
 
@@ -5802,6 +5863,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { bookingId: req.params.bookingId },
         );
         res.status(500).json({ error: "Failed to upload evidence photo" });
+      }
+    },
+  );
+
+  // Customer confirms or contests a piece-count claim, inside the 24h window.
+  app.post(
+    "/api/bookings/:bookingId/piece-count-dispute",
+    async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const user = (req as any).user;
+        const { bookingId } = req.params;
+
+        const parsed = z
+          .object({
+            action: z.enum(['confirm', 'dispute']),
+            evidencePhotoUrl: z.string().trim().min(1).optional(),
+          })
+          .safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "action must be 'confirm' or 'dispute'" });
+        }
+        const { action, evidencePhotoUrl } = parsed.data;
+
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) return res.status(404).json({ error: "Booking not found" });
+        // The customer's own claim to answer — admins excluded on purpose, since
+        // ops act through the resolution field rather than by impersonation.
+        if (booking.customerId !== user.id) {
+          return res.status(403).json({ error: "Not authorized" });
+        }
+
+        // 409 before 400: "already actioned" is the more specific truth when a
+        // resolved claim is also past its window.
+        if (booking.pieceCountDisputeStatus !== PIECE_COUNT_DISPUTE_STATUS.PENDING_CUSTOMER) {
+          return res.status(409).json({
+            error: "This claim has already been actioned",
+            status: booking.pieceCountDisputeStatus ?? null,
+          });
+        }
+
+        const openedAt = booking.pieceCountDisputeOpenedAt
+          ? new Date(booking.pieceCountDisputeOpenedAt).getTime()
+          : null;
+        if (openedAt === null || Date.now() - openedAt > PIECE_COUNT_DISPUTE_WINDOW_MS) {
+          return res.status(400).json({ error: "The 24-hour dispute window has expired" });
+        }
+
+        if (action === 'dispute' && !evidencePhotoUrl) {
+          return res.status(400).json({
+            error: "evidencePhotoUrl is required when disputing — upload a photo of your items first",
+          });
+        }
+
+        const now = new Date();
+        if (action === 'confirm') {
+          await storage.updateBooking(bookingId, {
+            pieceCountDisputeStatus: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_CONFIRMED,
+            pieceCountDisputeResolvedAt: now,
+            pieceCountDisputeResolution: PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED,
+          });
+          await notifyOpsPieceCountClaim({
+            bookingId,
+            outcome: 'cleared for payout (customer confirmed)',
+            declaredPieceCount: booking.declaredPieceCount ?? null,
+            actualPieceCount: booking.actualPieceCountOnArrival ?? null,
+            moverPhotoUrl: booking.pieceCountEvidencePhotoUrl ?? null,
+            payout: booking.pieceCountDiscrepancyPayout ?? null,
+            resolution: PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED,
+          });
+          logEvent.booking('piece_count_dispute_confirmed', { bookingId, customerId: user.id });
+          return res.json({
+            status: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_CONFIRMED,
+            resolution: PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED,
+          });
+        }
+
+        // Disputed. No resolution is written — ops decide that, so the payout
+        // stays unsettled rather than being auto-cleared either way.
+        await storage.updateBooking(bookingId, {
+          pieceCountDisputeStatus: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_DISPUTED,
+          pieceCountDisputeCustomerPhotoUrl: evidencePhotoUrl ?? null,
+        });
+        await notifyOpsPieceCountClaim({
+          bookingId,
+          outcome: 'DISPUTED — manual review required',
+          declaredPieceCount: booking.declaredPieceCount ?? null,
+          actualPieceCount: booking.actualPieceCountOnArrival ?? null,
+          moverPhotoUrl: booking.pieceCountEvidencePhotoUrl ?? null,
+          customerPhotoUrl: evidencePhotoUrl ?? null,
+          payout: booking.pieceCountDiscrepancyPayout ?? null,
+          resolution: null,
+        });
+        logEvent.booking('piece_count_dispute_raised', { bookingId, customerId: user.id });
+        res.json({ status: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_DISPUTED, resolution: null });
+      } catch (error) {
+        logEvent.error(
+          'piece_count_dispute_error',
+          error instanceof Error ? error : new Error('Unknown error'),
+          { bookingId: req.params.bookingId },
+        );
+        res.status(500).json({ error: "Failed to record your response" });
       }
     },
   );
@@ -5910,6 +6073,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               pieceCountEvidenceUploadedAt: new Date(),
               pieceCountDiscrepancyPayout:
                 discrepancyPayout === null ? null : discrepancyPayout.toString(),
+              // The payout is recorded but not settled: the customer gets 24
+              // hours to confirm or contest before anything is cleared.
+              pieceCountDisputeStatus: PIECE_COUNT_DISPUTE_STATUS.PENDING_CUSTOMER,
+              pieceCountDisputeOpenedAt: new Date(),
             }
           : {}),
       });
@@ -5951,6 +6118,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         } catch (emailErr) {
           logEvent.error('mover_cancel_customer_email_failed', emailErr instanceof Error ? emailErr : new Error('email error'), { bookingId });
+        }
+      }
+
+      // Open the dispute window with the customer. In-app plus email; there is
+      // no push provider in this codebase, only the mover WebSocket.
+      if (isPieceCountClaim && customer) {
+        const deadline = new Date(Date.now() + PIECE_COUNT_DISPUTE_WINDOW_MS);
+        const declaredText =
+          typeof booking.declaredPieceCount === 'number'
+            ? String(booking.declaredPieceCount)
+            : 'no count';
+        const body =
+          `Your mover reported ${actualCount} pieces on arrival. You declared ` +
+          `${declaredText}. You have 24 hours to confirm or dispute this before ` +
+          `the cancellation is processed. Open the app to review.`;
+        try {
+          await storage.createNotification({
+            userId: customer.id,
+            type: 'booking_update',
+            title: 'Action required: piece count dispute on your move',
+            message: body,
+            bookingId: booking.id,
+            actionUrl: `/my-bookings?booking=${booking.id}`,
+            isRead: false,
+          });
+        } catch (notifyErr) {
+          logEvent.error(
+            'piece_count_dispute_notification_failed',
+            notifyErr instanceof Error ? notifyErr : new Error('notify error'),
+            { bookingId },
+          );
+        }
+        try {
+          await notificationService.sendEmail({
+            to: customer.email,
+            subject: 'Action required: piece count dispute on your move',
+            body:
+              `<p>Hi ${he.escape(customer.name)},</p><p>${he.escape(body)}</p>` +
+              `<p>Confirm or dispute by ${deadline.toUTCString()}.</p>` +
+              `<p><a href="${getBaseUrl()}/my-bookings?booking=${booking.id}">Review your booking</a></p>` +
+              `<p>The LervIT Team</p>`,
+            type: 'booking_confirmation',
+          });
+        } catch (emailErr) {
+          logEvent.error(
+            'piece_count_dispute_email_failed',
+            emailErr instanceof Error ? emailErr : new Error('email error'),
+            { bookingId },
+          );
         }
       }
 

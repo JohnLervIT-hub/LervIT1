@@ -300,6 +300,14 @@ export const bookings = pgTable("bookings", {
   // it the mover's own count is the only input to a money decision.
   pieceCountEvidencePhotoUrl: text("piece_count_evidence_photo_url"),
   pieceCountEvidenceUploadedAt: timestamp("piece_count_evidence_uploaded_at"),
+  // 24-hour customer dispute window over that claim. Status walks
+  // pending_customer -> customer_confirmed | customer_disputed -> ops_review ->
+  // resolved. NULL throughout for every booking with no claim against it.
+  pieceCountDisputeStatus: text("piece_count_dispute_status"),
+  pieceCountDisputeOpenedAt: timestamp("piece_count_dispute_opened_at"),
+  pieceCountDisputeResolvedAt: timestamp("piece_count_dispute_resolved_at"),
+  pieceCountDisputeCustomerPhotoUrl: text("piece_count_dispute_customer_photo_url"),
+  pieceCountDisputeResolution: text("piece_count_dispute_resolution"),
 
   // Client-generated per-attempt key (X-Idempotency-Key). Collapses a
   // double-submit onto one booking instead of creating a twin. Scoped by the
@@ -384,6 +392,23 @@ export const insertMoverSchema = createInsertSchema(movers).omit({
   completedTrips: true,
 });
 
+/** Dispute window vocabulary, shared so the route, the cron job and the UI agree. */
+export const PIECE_COUNT_DISPUTE_STATUS = {
+  PENDING_CUSTOMER: 'pending_customer',
+  CUSTOMER_CONFIRMED: 'customer_confirmed',
+  CUSTOMER_DISPUTED: 'customer_disputed',
+  OPS_REVIEW: 'ops_review',
+  RESOLVED: 'resolved',
+} as const;
+
+export const PIECE_COUNT_DISPUTE_RESOLUTION = {
+  AUTO_APPROVED: 'auto_approved',
+  AUTO_APPROVED_NO_RESPONSE: 'auto_approved_no_response',
+} as const;
+
+/** How long the customer has to confirm or contest a claim. */
+export const PIECE_COUNT_DISPUTE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export const insertBookingSchema = createInsertSchema(bookings).omit({
   id: true,
   createdAt: true,
@@ -395,6 +420,11 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   pieceCountDiscrepancyPayout: true,
   pieceCountEvidencePhotoUrl: true,
   pieceCountEvidenceUploadedAt: true,
+  pieceCountDisputeStatus: true,
+  pieceCountDisputeOpenedAt: true,
+  pieceCountDisputeResolvedAt: true,
+  pieceCountDisputeCustomerPhotoUrl: true,
+  pieceCountDisputeResolution: true,
   paymentStatus: true,
   stripePaymentIntentId: true,
   notifiedAt: true,
