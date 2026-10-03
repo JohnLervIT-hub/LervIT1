@@ -2096,6 +2096,7 @@ export function findBestMatch(
   
   let bestMatch: FurnitureItem | null = null;
   let bestScore = 0;
+  const candidates: { item: FurnitureItem; score: number }[] = [];
   
   for (const item of FURNITURE_DATABASE) {
     const itemNameLower = item.name.toLowerCase();
@@ -2171,6 +2172,8 @@ export function findBestMatch(
     // Apply category mismatch penalty
     score = score * (1 - categoryMismatchPenalty);
     
+    candidates.push({ item, score });
+
     if (score > bestScore) {
       bestScore = score;
       bestMatch = item;
@@ -2186,6 +2189,40 @@ export function findBestMatch(
     }
   }
   
+  // VOLUME SANITY BOUND. The score above is pure token overlap, so a near-tie
+  // between size variants of the same shape is decided by wording, not size —
+  // the comment on the clamp records a U-shaped query returning a 103.56ft3
+  // small L-sectional. When the winner is wildly off the vision estimate and a
+  // comparably-scored row is not, take the plausible one. The tie-break above
+  // only fires on exact float equality; this covers the near-ties it misses.
+  if (bestMatch && hintVolumeFt3 !== undefined && hintVolumeFt3 > 0) {
+    const ratio = bestMatch.volume_ft3 / hintVolumeFt3;
+    if (ratio > 3 || ratio < 1 / 3) {
+      const rescued = candidates
+        .filter(c => {
+          if (c.item === bestMatch) return false;
+          if (c.score < bestScore * 0.85) return false;
+          const r = c.item.volume_ft3 / hintVolumeFt3;
+          return r <= 2 && r >= 0.5;
+        })
+        .sort(
+          (a, b) =>
+            Math.abs(a.item.volume_ft3 - hintVolumeFt3) -
+            Math.abs(b.item.volume_ft3 - hintVolumeFt3),
+        )[0];
+      if (rescued) {
+        console.warn(
+          '[findBestMatch] volume sanity bound: "%s" (%sft3, score %s) is %sx the %sft3 estimate; using "%s" (%sft3, score %s) instead',
+          bestMatch.name, bestMatch.volume_ft3, bestScore.toFixed(3),
+          ratio.toFixed(2), hintVolumeFt3.toFixed(1),
+          rescued.item.name, rescued.item.volume_ft3, rescued.score.toFixed(3),
+        );
+        bestMatch = rescued.item;
+        bestScore = rescued.score;
+      }
+    }
+  }
+
   if (bestMatch && bestScore > 0.3) {  // Minimum threshold for a match
     // Report a bounded similarity: SIMILARITY_THRESHOLD and the confidence
     // surfaced to the customer both assume 0..1.

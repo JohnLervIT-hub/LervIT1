@@ -8821,6 +8821,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // AI photo analysis endpoint with free mock fallback
+  // DISABLED: unauthenticated, no rate limit, thresholds disagree with VEHICLE_VOLUME_THRESHOLDS
+  //
+  // Its only UI caller is itself commented out (RequestMove.tsx, ARCHIVED block),
+  // and the prompt below hardcodes load-size bands (boxes 1-10 / medium 11-50 /
+  // large 50-170 / apartment 170+) that contradict VEHICLE_VOLUME_THRESHOLDS
+  // (40 / 140 / 350). It also bypasses FURNITURE_DATABASE entirely. Original
+  // handler retained below, commented, for reference.
+  app.post("/api/ai/analyze-photo", upload.single('photo'), async (_req: Request, res: Response) => {
+    res.status(410).json({ error: 'This endpoint is deprecated. Use /api/ai/items/identify.' });
+    return;
+  });
+
+  /* ORIGINAL HANDLER (disabled, see above)
   app.post("/api/ai/analyze-photo", upload.single('photo'), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
@@ -9018,6 +9031,7 @@ Respond with VALID JSON only:
       res.status(500).json({ error: error instanceof Error ? error.message : "Analysis failed" });
     }
   });
+  */
 
   // Geocoding distance endpoint for AI auto-quote predictor
   app.post("/api/geocode/distance", async (req: Request, res: Response) => {

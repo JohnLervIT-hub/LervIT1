@@ -51,7 +51,6 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
 const SIMILARITY_THRESHOLD = 0.70;  // Match threshold for using database values
-const HIGH_CONFIDENCE_THRESHOLD = 0.85;  // When to fully trust database match
 
 // AUTOGEN:REF_DIMS:START — regenerate with: npm run generate:dims (source: shared/furniture-database.ts)
 const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (use these):
@@ -466,11 +465,18 @@ function correctCategory(itemName: string, detectedCategory: string): {
   const nameLower = itemName.toLowerCase();
   
   // Check if item name contains chair keywords but was misclassified
-  const chairKeywords = ['chair', 'armchair', 'recliner', 'seat', 'stool'];
+  // No bare 'seat': it is a substring of 'loveseat', '3-seater' and '3-seat
+  // sleeper', all names this prompt actively asks the model to produce, and the
+  // chair branch runs first — so every seat-counted sofa and sofa bed was being
+  // relabelled 'Chair'.
+  const chairKeywords = ['chair', 'armchair', 'recliner', 'stool'];
   const sofaKeywords = ['sofa', 'couch', 'loveseat', 'sectional', 'futon', 'sofa bed', 'sleeper'];
   const bedKeywords = ['bed', 'mattress', 'bunk', 'crib'];
-  const tableKeywords = ['table', 'desk', 'stand', 'nightstand'];
-  const dresserKeywords = ['dresser', 'chest', 'drawer', 'wardrobe', 'cabinet'];
+  // No bare 'stand' either: it caught 'nightstand' (a Dresser row) before the
+  // dresser branch could, and sent 'TV stand' to Table when that row is Storage.
+  // 'desk' still covers the standing-desk case.
+  const tableKeywords = ['table', 'desk'];
+  const dresserKeywords = ['dresser', 'chest', 'drawer', 'wardrobe', 'cabinet', 'nightstand', 'night stand', 'bedside'];
   
   if (chairKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Chair') {
     console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Chair (detected "${itemName}")`);
@@ -482,14 +488,19 @@ function correctCategory(itemName: string, detectedCategory: string): {
     return { category: 'Sofa', wasCorrected: true, originalCategory: detectedCategory };
   }
   
-  if (bedKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Bed') {
+  // 'bedside' is excluded: 'Nightstand / Bedside table' is a Dresser row, but
+  // the bare 'bed' keyword would claim it here, two branches early.
+  const isBedside = nameLower.includes('bedside') || nameLower.includes('night stand') || nameLower.includes('nightstand');
+  if (!isBedside && bedKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Bed') {
     console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Bed (detected "${itemName}")`);
     return { category: 'Bed', wasCorrected: true, originalCategory: detectedCategory };
   }
   
   if (tableKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Table') {
-    // Don't correct if it's actually a nightstand (which is a Dresser)
-    if (!nameLower.includes('nightstand')) {
+    // Don't correct if it's actually a nightstand / bedside table (a Dresser row).
+    // The pre-existing guard only tested 'nightstand', so "Bedside table" still
+    // landed on Table via the bare 'table' keyword.
+    if (!isBedside) {
       console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Table (detected "${itemName}")`);
       return { category: 'Table', wasCorrected: true, originalCategory: detectedCategory };
     }
@@ -675,8 +686,11 @@ IDENTIFY:
 1. Item type (be specific: "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
 3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
-4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
-5. Material if visible (leather, fabric, wood, metal, glass)
+4. Size indicators (Queen, King, 3-seater, L-shaped, etc.) — put these IN "itemName"
+5. Material if visible (leather, fabric, wood, metal, glass) — put this IN "itemName" too
+
+There is no separate field for 4 or 5. "itemName" is the only text that is
+matched against the item catalogue, so anything you leave out of it is lost.
 
 SECTIONAL SHAPE — DECIDE THIS FIRST, BEFORE SIZE:
 Count the ARMS/RETURNS that turn away from the longest run of seating:
@@ -719,7 +733,9 @@ Before classifying any sofa, check for sofa bed / sleeper indicators:
 • Storage chaise with a lid that lifts up
 • Unusually thick/heavy base panels compared to standard sofas
 
-If ANY sofa bed indicators are detected, classify as "Sofa Bed" NOT as regular "Sofa" or "Sectional":
+If ANY sofa bed indicators are detected, set "subcategory": "Sofa Bed" (keep
+"category": "Sofa" — "Sofa Bed" is NOT a valid category) and do not describe it
+as a regular sofa or sectional:
 
 REGULAR SOFA BED TIERS:
 • TWIN (loveseat sleeper): 2 seat cushions, compact. ~170×90×85cm, 55kg
@@ -1102,8 +1118,23 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         insurance = 'medium';
       }
       
-      // Fragile/electronics get higher insurance
-      if (visionResult.category === 'Electronics' || visionResult.category === 'Fragile') {
+      // Fragile/electronics get higher insurance.
+      //
+      // The 'Fragile' arm this replaces was dead: 'Fragile' is not in
+      // FurnitureCategory nor in the prompt's category list, so the model can
+      // never return it (it exists only in the legacy OUTPUT enum). There is no
+      // matched row to read handling_complexity from on this path either — this
+      // is the no-match branch, and handling_complexity has no 'fragile' or
+      // 'extreme' member in any case. Fragility is therefore inferred from the
+      // item name, which is the only fragility signal this path actually has.
+      const FRAGILE_NAME_HINTS = [
+        'glass', 'mirror', 'piano', 'tv', 'television', 'monitor', 'screen',
+        'china', 'artwork', 'painting', 'aquarium', 'chandelier', 'marble',
+      ];
+      const nameIsFragile = FRAGILE_NAME_HINTS.some(h =>
+        visionResult.itemName.toLowerCase().includes(h),
+      );
+      if (visionResult.category === 'Electronics' || nameIsFragile) {
         insurance = insurance === 'standard' ? 'medium' : insurance;
       }
       
