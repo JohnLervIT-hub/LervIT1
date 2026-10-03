@@ -12124,6 +12124,9 @@ Respond with VALID JSON only:
               recommendedMovers: result.recommendedMovers,
               insuranceLevel: result.insuranceLevel,
               confidence: result.confidence.toString() as any,
+              // Without this the piece-count dropdown never renders: the client
+              // gates on it, and every field here is copied by hand.
+              pieceCount: result.pieceCount ?? null,
               sourceMetadata: result.sourceMetadata,
             });
             items.push({ ...identifiedItem, fullSceneConfirmed: result.fullSceneConfirmed });
@@ -12149,6 +12152,9 @@ Respond with VALID JSON only:
               recommendedMovers: result.recommendedMovers,
               insuranceLevel: result.insuranceLevel,
               confidence: result.confidence.toString(),
+              // Same omission as above. This is the pre-booking quote branch, so
+              // it is the one the customer actually sees.
+              pieceCount: result.pieceCount ?? null,
               sourceMetadata: result.sourceMetadata,
             });
           }
