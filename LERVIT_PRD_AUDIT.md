@@ -102,7 +102,7 @@ LervIT1/
 | # | File | Issue | Impact |
 |---|---|---|---|
 | 1 | `server/notifications.ts:26` | `RESEND_API_KEY` not set in production → `resend` client is `null` at startup → **all email is silently dropped** | Move confirmations, Stripe onboarding nudges, abandoned booking reminders, verification status — none delivered |
-| 2 | `server/vision-engine-v2.ts:50`, `ai-identifier.ts:9` | `OPENAI_API_KEY` not set in production → `openai` client is `null` → Vision Engine returns nothing | Booking step 2 photo analysis returns no AI result; load size/vehicle recommendation falls back to manual input |
+| 2 | `server/vision-engine-v2.ts:50` (`ai-identifier.ts` deleted in this commit — it was dead code, never a live risk) | `OPENAI_API_KEY` not set in production → `openai` client is `null` → Vision Engine returns nothing | Booking step 2 photo analysis returns no AI result; load size/vehicle recommendation falls back to manual input |
 | 3 | `server/ai-support-analyzer.ts:99` | Same `OPENAI_API_KEY` guard → AI Support Copilot returns empty early → no ticket summaries or suggested responses in admin | Admin support team blind to AI-assisted triage |
 | 4 | `shared/schema.ts` + `server/routes.ts:3322` | `promo_code_uses` table referenced in promo code logic does **not exist in production schema** → runtime error when customer applies LERVIT20 | Any customer attempting a promo code hits a 500 error |
 | 5 | `server/routes.ts:5697` | `TODO: Implement refund handling` — Stripe `charge.refunded` webhook event is handled with a log only; no booking status update, no customer notification | Refunds processed in Stripe dashboard never reflected in platform |

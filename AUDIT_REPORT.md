@@ -318,7 +318,7 @@ Rationale:
 18. **Actual-vs-estimate tracking** — populate `bookingMetrics` (schema.ts:625) automatically on booking completion; enables learning pipeline to close the loop.
 
 ### P4 — general hardening
-19. **Remove or delete deprecated `server/ai-identifier.ts`** if truly superseded by `vision-engine-v2.ts`.
+19. ~~**Remove or delete deprecated `server/ai-identifier.ts`** if truly superseded by `vision-engine-v2.ts`.~~ **DONE** — deleted; it was dead code (no importers; its entry point `identifyAndCategorizeItem` was unwired from `server/routes.ts` in `ab46b8a` when Vision Engine 2.0 landed).
 20. **Consolidate `URL fallback chains`** — one helper (`getBaseUrl()`) called everywhere, not duplicated across 8+ files.
 21. **Health check depth** — `GET /api/health/detailed` exists; ensure it validates DB, Stripe, OpenAI reachability for uptime monitors.
 
