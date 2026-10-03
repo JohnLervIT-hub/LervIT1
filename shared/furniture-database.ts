@@ -277,7 +277,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     volume_ft3: calcVolume(383, 289, 90),
     pieceCount: 5,
     weight_kg: 170,
-    load_size: 'large',
+    load_size: 'apartment',
     vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'moderate',
