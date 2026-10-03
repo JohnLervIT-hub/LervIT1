@@ -27,8 +27,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
-import { calculatePrice, calculatePriceRange, PRICING_CONFIG, type PriceBreakdown, type PriceRange, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
-import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
+import { calculatePrice, calculatePriceRange, getVehicleClassFromVolume, vehicleTypeFromClass, PRICING_CONFIG, type PriceBreakdown, type PriceRange, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
+import { getLoadSizeFromVolume } from "@shared/furniture-database";
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
@@ -219,19 +219,6 @@ function capitalizeFirst(str: string): string {
 // Vehicle tiers, ranked smallest → largest. A load's vehicle is the max tier
 // across its identified items. VEHICLE_TIER_KEYS order must match the ranks.
 /**
- * Longest-side limits, in cm, for the dimension bump in the three cascades below.
- *
- * VAN_MIN_CM is the length past which a load stops being a pickup job: an 8-foot
- * bed (244cm) with the tailgate down, plus the overhang a strapped-and-flagged
- * load legitimately carries. At 200cm it billed a 27 ft3 / 40 kg queen mattress
- * and a 3.9 ft3 98-inch TV as cargo-van loads, and overrode the database's own
- * 'pickup' tag on all 12 items it caught in 200-270cm.
- *
- * PICKUP_MIN_CM stays 150: it only ever lifts car -> pickup, never to van, and
- * it is the one guard for a vision-estimated item that matched nothing in the
- * database and so carries no vehicle tag to floor on.
- */
-/**
  * Items that need a Moving Truck whatever their volume says — matched on the
  * item name. These replace the per-item database vehicle floor, which lifted the
  * displayed tier above the volume tier on 22 items and was the reason the card
@@ -256,9 +243,6 @@ function requiresTruck(items: IdentifiedItem[]): boolean {
     return TRUCK_REQUIRED_ITEMS.some((kw) => name.includes(kw));
   });
 }
-
-const VAN_MIN_CM = 270;
-const PICKUP_MIN_CM = 150;
 
 const VEHICLE_LABELS: Record<string, string> = {
   car: 'SUV',
@@ -1670,21 +1654,12 @@ export default function RequestMove() {
           function(sum, item) { return sum + parseFloat(item.volumeCuft || '0'); }, 0
         );
 
-        const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
-        const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
-        let tierIndex = 0;
-        if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)    tierIndex = 3;
-        else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
-        else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
-
         const maxMovers = Math.max(
           ...completedAll.map(function(item) { return item.recommendedMovers || 1; })
         );
 
-        // Weight no longer touches vehicle selection — it drives movers and the
-        // heavy-item surcharge only. The weight bumps raised the displayed tier
-        // while calculatePrice kept classing on volume, so the card and the
-        // quote disagreed on 64 of 124 items.
+        // Weight drives movers and the heavy-item surcharge only, never vehicle
+        // selection.
         const hasHeavyItems = completedAll.some(function(item) {
           return (
             item.handlingComplexity === 'high' ||
@@ -1693,29 +1668,15 @@ export default function RequestMove() {
           );
         });
 
-        const maxDimension = Math.max(
-          ...completedAll.map(function(item) {
-            return Math.max(
-              parseFloat(String(item.dimensionsLcm || 0)),
-              parseFloat(String(item.dimensionsWcm || 0)),
-              parseFloat(String(item.dimensionsHcm || 0))
-            );
-          })
-        );
-        // Length floor only: a 160cm item does not fit an SUV, and past
-        // VAN_MIN_CM it does not fit a pickup bed tailgate-down either.
-        if (maxDimension > VAN_MIN_CM && tierIndex < 2)      tierIndex = 2;
-        else if (maxDimension > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
+        // Volume alone picks the class, through the same canonical mapping
+        // calculatePrice uses, so the card and the quote cannot disagree.
+        // Specialty items are the one exception: a piano needs a truck whatever
+        // its volume says.
+        const recommendedVehicle = requiresTruck(completedAll)
+          ? 'truck'
+          : vehicleTypeFromClass(getVehicleClassFromVolume(totalVolume));
+        const recommendedLoadSize = getLoadSizeFromVolume(totalVolume);
 
-        // Specialty override: a piano or hot tub needs a truck at any volume.
-        if (requiresTruck(completedAll)) tierIndex = 3;
-
-        const recommendedLoadSize = loadSizeTiers[tierIndex];
-        const recommendedVehicle  = vehicleTiers[tierIndex];
-
-        // Use the actual detected volume for display consistency.
-        // calculatePrice now takes the max of volume-based and loadSize-based vehicle class,
-        // so the correct van/truck class is used even when weight bumps the tier.
         setAiDetectedVolume(totalVolume);
         setAiRecommendedVehicle(recommendedVehicle);
 
@@ -1781,13 +1742,6 @@ export default function RequestMove() {
       (sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0
     );
 
-    const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
-    const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
-    let tierIndex = 0;
-    if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
-    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
-    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
-
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
     // Weight drives movers and the surcharge only, never vehicle selection.
     const hasHeavyItems = completedItems.some(item =>
@@ -1796,22 +1750,15 @@ export default function RequestMove() {
       parseFloat(item.weightKg || '0') > 30
     );
 
-    const maxDim = Math.max(...completedItems.map(item =>
-      Math.max(
-        parseFloat(String(item.dimensionsLcm || 0)),
-        parseFloat(String(item.dimensionsWcm || 0)),
-        parseFloat(String(item.dimensionsHcm || 0))
-      )
-    ));
-    if (maxDim > VAN_MIN_CM && tierIndex < 2)      tierIndex = 2;
-    else if (maxDim > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
-
-    if (requiresTruck(completedItems)) tierIndex = 3;
+    // Volume-only class, plus the specialty truck exception.
+    const recommendedVehicle = requiresTruck(completedItems)
+      ? 'truck'
+      : vehicleTypeFromClass(getVehicleClassFromVolume(totalVolume));
 
     setAiDetectedVolume(totalVolume);
-    setAiRecommendedVehicle(vehicleTiers[tierIndex]);
+    setAiRecommendedVehicle(recommendedVehicle);
 
-    setLoadSize(loadSizeTiers[tierIndex]);
+    setLoadSize(getLoadSizeFromVolume(totalVolume));
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
     setHeavyItem(hasHeavyItems);
   };
@@ -1841,16 +1788,8 @@ export default function RequestMove() {
     const completedItems = identifiedItems.filter(item => item.processingStatus === 'completed');
     if (completedItems.length === 0) return;
     
-    // Volume thresholds sourced from shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
-    // CAR_MAX: 20 ft³, PICKUP_MAX: 165 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
-    const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
-    const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
-    let tierIndex = 0;
-    if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
-    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
-    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
-    
+
     // Get max recommended movers
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
     
@@ -1860,25 +1799,15 @@ export default function RequestMove() {
       item.handlingComplexity === 'very_high' ||
       parseFloat(item.weightKg || '0') > 30
     );
-    
-    // DIMENSION OVERRIDE: Check max dimension across all items
-    const maxDimRecalc = Math.max(...completedItems.map(item => {
-      return Math.max(
-        parseFloat(String(item.dimensionsLcm || 0)),
-        parseFloat(String(item.dimensionsWcm || 0)),
-        parseFloat(String(item.dimensionsHcm || 0))
-      );
-    }));
-    if (maxDimRecalc > VAN_MIN_CM && tierIndex < 2) tierIndex = 2;
-    else if (maxDimRecalc > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
 
-    if (requiresTruck(completedItems)) tierIndex = 3;
-    
-    const recommendedLoadSize = loadSizeTiers[tierIndex];
+    // Volume-only class, plus the specialty truck exception.
+    const recommendedVehicle = requiresTruck(completedItems)
+      ? 'truck'
+      : vehicleTypeFromClass(getVehicleClassFromVolume(totalVolume));
+    const recommendedLoadSize = getLoadSizeFromVolume(totalVolume);
 
-    // Use actual volume for display consistency; calculatePrice handles class via loadSize floor.
     setAiDetectedVolume(totalVolume);
-    setAiRecommendedVehicle(vehicleTiers[tierIndex]);
+    setAiRecommendedVehicle(recommendedVehicle);
     
     // Apply recommendations
     setLoadSize(recommendedLoadSize);
