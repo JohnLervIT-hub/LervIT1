@@ -14,10 +14,6 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      // z-[6000] clears the fixed site header (Header.tsx, z-[5000]). At the
-      // viewport default of z-[100] a mobile toast rendered behind it: top-0 on
-      // mobile puts the toast exactly where the header is, so destructive
-      // messages like "Photos required" were invisible.
       "fixed top-0 z-[6000] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
       className
     )}

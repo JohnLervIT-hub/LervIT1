@@ -5,8 +5,6 @@
  * Items with high similarity matches bypass estimation and use these exact values.
  */
 
-import { VEHICLE_DISPLAY_NAMES } from './vehicle-labels';
-
 export interface FurnitureItem {
   item_id: string;
   name: string;
@@ -20,6 +18,8 @@ export interface FurnitureItem {
   };
   volume_ft3: number;
   weight_kg: number;
+  load_size: LoadSizeCategory;
+  vehicle: VehicleType;
   movers_required: 1 | 2;
   handling_complexity: 'low' | 'medium' | 'slight' | 'moderate' | 'high' | 'very_high';
   insurance_level: 'standard' | 'medium' | 'high' | 'premium';
@@ -73,6 +73,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 191, width: 99, height: 40 },
     volume_ft3: calcVolume(191, 99, 40),
     weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -83,9 +85,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Bed',
     subcategory: 'Twin',
     keywords: ['twin', 'single', 'bed', 'storage', 'drawers', 'captain'],
-    dimensions_cm: { length: 200, width: 107, height: 42 },
-    volume_ft3: calcVolume(200, 107, 42),
+    dimensions_cm: { length: 191, width: 99, height: 43 },
+    volume_ft3: calcVolume(191, 99, 43),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -99,6 +103,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 191, width: 137, height: 40 },
     volume_ft3: calcVolume(191, 137, 40),
     weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -112,6 +118,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 152, height: 40 },
     volume_ft3: calcVolume(203, 152, 40),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -125,6 +133,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 210, width: 165, height: 110 },
     volume_ft3: calcVolume(210, 165, 110),
     weight_kg: 75,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -138,6 +148,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 193, height: 40 },
     volume_ft3: calcVolume(203, 193, 40),
     weight_kg: 70,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -151,6 +163,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 200, width: 100, height: 170 },
     volume_ft3: calcVolume(200, 100, 170),
     weight_kg: 80,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -164,6 +178,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 130, width: 70, height: 100 },
     volume_ft3: calcVolume(130, 70, 100),
     weight_kg: 20,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -177,6 +193,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 200, width: 100, height: 90 },
     volume_ft3: calcVolume(200, 100, 90),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -192,6 +210,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 85, height: 85 },
     volume_ft3: calcVolume(150, 85, 85),
     weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -205,45 +225,53 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 210, width: 90, height: 85 },
     volume_ft3: calcVolume(210, 90, 85),
     weight_kg: 70,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'slight',
     insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_SECTIONAL_L_SM_001',
-    name: 'Small L-shaped sectional sofa',
+    name: 'Small L-shaped sectional sofa (2-piece, apartment-size)',
     category: 'Sofa',
     subcategory: 'Sectional',
     keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'small', 'compact', 'apartment', '2-piece', 'two-piece', 'loveseat-chaise'],
     dimensions_cm: { length: 230, width: 150, height: 85 },
     volume_ft3: calcVolume(230, 150, 85),
     weight_kg: 70,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_SECTIONAL_L_MD_001',
-    name: 'Medium L-shaped sectional sofa',
+    name: 'Medium L-shaped sectional sofa (3-piece, standard)',
     category: 'Sofa',
     subcategory: 'Sectional',
     keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise', 'medium', 'standard', '3-piece', 'three-piece'],
-    dimensions_cm: { length: 270, width: 200, height: 85 },
-    volume_ft3: calcVolume(270, 200, 85),
+    dimensions_cm: { length: 300, width: 180, height: 85 },
+    volume_ft3: calcVolume(300, 180, 85),
     weight_kg: 120,
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_SECTIONAL_L_LG_001',
-    name: 'Large L-shaped sectional sofa',
+    name: 'Large L-shaped sectional sofa (4-5 piece, deep-seat, oversized)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise', 'large', 'oversized', 'deep', '4-piece', '5-piece', 'modular', 'wide', 'deep-seat', 'nesting'],
+    keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise', 'large', 'oversized', 'deep', '4-piece', '5-piece', 'modular', 'wide', 'deep-seat'],
     dimensions_cm: { length: 370, width: 220, height: 90 },
     volume_ft3: calcVolume(370, 220, 90),
     weight_kg: 170,
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -253,10 +281,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Small U-shaped sectional sofa (compact, 3-piece)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'small', 'compact', '3-piece', 'u-shape', 'nesting'],
+    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'small', 'compact', '3-piece', 'u-shape'],
     dimensions_cm: { length: 280, width: 200, height: 85 },
     volume_ft3: calcVolume(280, 200, 85),
     weight_kg: 130,
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -266,10 +296,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Medium U-shaped sectional sofa (standard, 4-5 piece)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'medium', 'standard', '4-piece', '5-piece', 'u-shape', 'nesting'],
+    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'medium', 'standard', '4-piece', '5-piece', 'u-shape'],
     dimensions_cm: { length: 350, width: 250, height: 85 },
     volume_ft3: calcVolume(350, 250, 85),
     weight_kg: 180,
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -279,10 +311,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Large U-shaped sectional sofa (oversized, 6+ piece)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'large', 'oversized', '6-piece', 'theater', 'pit', 'u-shape', 'deep-seat', 'nesting'],
+    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'large', 'oversized', '6-piece', 'theater', 'pit', 'u-shape', 'deep-seat'],
     dimensions_cm: { length: 420, width: 300, height: 90 },
     volume_ft3: calcVolume(420, 300, 90),
     weight_kg: 240,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -296,6 +330,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 170, width: 90, height: 85 },
     volume_ft3: calcVolume(170, 90, 85),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -309,6 +345,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 200, width: 95, height: 85 },
     volume_ft3: calcVolume(200, 95, 85),
     weight_kg: 75,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -322,6 +360,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 230, width: 100, height: 90 },
     volume_ft3: calcVolume(230, 100, 90),
     weight_kg: 95,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -331,10 +371,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Small sectional sofa bed (2-piece L-shaped with pull-out sleeper)',
     category: 'Sofa',
     subcategory: 'Sofa Bed',
-    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'small', '2-piece', 'convertible', 'chaise', 'corner'],
-    dimensions_cm: { length: 250, width: 170, height: 85 },
-    volume_ft3: calcVolume(250, 170, 85),
+    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'pull-out', 'pullout', 'storage', 'small', '2-piece', 'convertible', 'chaise', 'corner'],
+    dimensions_cm: { length: 228, width: 151, height: 66 },
+    volume_ft3: calcVolume(228, 151, 66),
     weight_kg: 110,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -344,10 +386,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage)',
     category: 'Sofa',
     subcategory: 'Sofa Bed',
-    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'medium', '3-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy'],
-    dimensions_cm: { length: 290, width: 200, height: 90 },
-    volume_ft3: calcVolume(290, 200, 90),
+    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'pull-out', 'pullout', 'storage', 'medium', '3-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy'],
+    dimensions_cm: { length: 240, width: 160, height: 83 },
+    volume_ft3: calcVolume(240, 160, 83),
     weight_kg: 145,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -357,10 +401,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage)',
     category: 'Sofa',
     subcategory: 'Sofa Bed',
-    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'large', 'oversized', '4-piece', '5-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy', 'modular', 'nesting'],
-    dimensions_cm: { length: 340, width: 220, height: 90 },
-    volume_ft3: calcVolume(340, 220, 90),
+    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'large', 'oversized', '4-piece', '5-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy', 'modular'],
+    dimensions_cm: { length: 270, width: 200, height: 85 },
+    volume_ft3: calcVolume(270, 200, 85),
     weight_kg: 180,
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'moderate',
     insurance_level: 'medium',
@@ -368,80 +414,17 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   {
     item_id: 'SOFA_RECLINER_001',
     name: 'Recliner sofa (3-seat)',
-    // 'Sofa', not 'Chair': a 3-seat recliner sofa is a sofa, and this was the
-    // only row in the database whose name said sofa while its category did not.
-    // findBestMatch penalises a sofa-named query by 0.5 on any non-Sofa row, so
-    // this row scored 0.667 against its OWN name while "Full/Double sofa bed"
-    // took it at 0.778 — a 57ft3 row answering for an 81ft3 one.
-    category: 'Sofa',
+    category: 'Chair',
     subcategory: 'Recliner',
-    // No 'electric': a reclining sofa being electric is not what identifies
-    // it, and the token let "Black folding electric treadmill" match this row
-    // over the actual treadmill. Every other 'electric' row carries the word
-    // in its own name (Standing desk, Stove / Range), where it is doing real work.
-    keywords: ['recliner', 'reclining', 'sofa', 'lazy', 'power'],
+    keywords: ['recliner', 'reclining', 'sofa', 'lazy', 'electric', 'power'],
     dimensions_cm: { length: 230, width: 100, height: 100 },
     volume_ft3: calcVolume(230, 100, 100),
     weight_kg: 110,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
-  },
-  {
-    item_id: 'SOFA_CUDDLE_ROUND_001',
-    name: 'Round cuddle sofa / snuggler',
-    category: 'Sofa',
-    subcategory: 'Cuddle',
-    // No 'loveseat' here on purpose. Before this row existed, "cuddle sofa",
-    // "round sofa" and "curved sofa" all matched '2-seater loveseat sofa' at
-    // similarity 1.000 — over the 0.70 threshold, so the matcher adopted the
-    // loveseat's 38.27ft3 outright and discarded the vision model's own
-    // estimate. A cuddler is roughly 1.6x that, so the load was quoted
-    // an SUV for a pickup job.
-    // 'nest' lives here and 'nesting' on the modular sectionals below. A plain
-    // "nest sofa" is this deep, enveloping shape; "nesting" means pieces that
-    // tuck into each other, which is a modular sectional. Keeping them on
-    // separate rows makes each resolve on an exact match (+3) while the other
-    // only partials (+1), so neither term is decided by array order.
-    keywords: ['cuddle', 'snuggler', 'cuddler', 'nest', 'round', 'circular', 'curved', 'sofa', 'couch', 'oversized', 'deep-seat'],
-    // Bounding box, like every row here. Marketed cuddlers are D-shaped at
-    // 54-64" wide rather than a full circle, so the box is rectangular; what
-    // has to fit in the vehicle is still the box, not the cushion.
-    dimensions_cm: { length: 160, width: 130, height: 85 },
-    volume_ft3: calcVolume(160, 130, 85),
-    weight_kg: 85,
-    movers_required: 2,
-    handling_complexity: 'moderate',
-    insurance_level: 'medium',
-  },
-  {
-    item_id: 'SOFA_CURVED_001',
-    name: 'Curved / crescent sofa (3-seat)',
-    category: 'Sofa',
-    subcategory: 'Curved',
-    keywords: ['curved', 'crescent', 'arc', 'banana', 'conversation', 'round', 'sofa', 'couch', '3-seat', 'three-seat'],
-    dimensions_cm: { length: 280, width: 120, height: 85 },
-    volume_ft3: calcVolume(280, 120, 85),
-    weight_kg: 90,
-    movers_required: 2,
-    handling_complexity: 'moderate',
-    insurance_level: 'medium',
-  },
-  {
-    item_id: 'SOFA_CHAISE_001',
-    name: 'Chaise lounge',
-    category: 'Sofa',
-    subcategory: 'Chaise',
-    keywords: ['chaise', 'chaise lounge', 'lounge chair', 'daybed', 'recliner chair'],
-    dimensions_cm: { length: 165, width: 65, height: 88 },
-    volume_ft3: calcVolume(165, 65, 88),
-    weight_kg: 35,
-    movers_required: 1,
-    // Spec said 'standard', which is not in the handling_complexity union
-    // ('low' | 'medium' | 'slight' | 'moderate' | 'high' | 'very_high').
-    // 'low' is the nearest member and matches the 1-mover / 35kg profile.
-    handling_complexity: 'low',
-    insurance_level: 'standard',
   },
   {
     item_id: 'ARMCHAIR_001',
@@ -452,6 +435,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 85, width: 85, height: 90 },
     volume_ft3: calcVolume(85, 85, 90),
     weight_kg: 30,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -465,6 +450,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 90, width: 85, height: 100 },
     volume_ft3: calcVolume(90, 85, 100),
     weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -477,9 +464,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Table',
     subcategory: 'Dining',
     keywords: ['dining', 'table', '4-person', 'four', 'kitchen'],
-    dimensions_cm: { length: 120, width: 100, height: 75 },
-    volume_ft3: calcVolume(120, 100, 75),
+    dimensions_cm: { length: 120, width: 75, height: 75 },
+    volume_ft3: calcVolume(120, 75, 75),
     weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -493,6 +482,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 180, width: 90, height: 75 },
     volume_ft3: calcVolume(180, 90, 75),
     weight_kg: 50,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -506,6 +497,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 240, width: 100, height: 75 },
     volume_ft3: calcVolume(240, 100, 75),
     weight_kg: 70,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -519,6 +512,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 120, width: 60, height: 45 },
     volume_ft3: calcVolume(120, 60, 45),
     weight_kg: 25,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -532,6 +527,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 50, height: 55 },
     volume_ft3: calcVolume(50, 50, 55),
     weight_kg: 12,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -545,6 +542,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 120, width: 35, height: 80 },
     volume_ft3: calcVolume(120, 35, 80),
     weight_kg: 20,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -558,6 +557,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 75, height: 75 },
     volume_ft3: calcVolume(150, 75, 75),
     weight_kg: 40,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -571,6 +572,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 180, width: 150, height: 75 },
     volume_ft3: calcVolume(180, 150, 75),
     weight_kg: 65,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -584,6 +587,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 75, height: 125 },
     volume_ft3: calcVolume(150, 75, 125),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -599,6 +604,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 45, width: 50, height: 90 },
     volume_ft3: calcVolume(45, 50, 90),
     weight_kg: 8,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -612,6 +619,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 65, width: 65, height: 110 },
     volume_ft3: calcVolume(65, 65, 110),
     weight_kg: 18,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -625,6 +634,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 70, width: 70, height: 130 },
     volume_ft3: calcVolume(70, 70, 130),
     weight_kg: 25,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -638,6 +649,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 75, width: 70, height: 95 },
     volume_ft3: 15.8,  // Verified realistic volume for accent chair
     weight_kg: 12,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -651,6 +664,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 80, width: 75, height: 105 },
     volume_ft3: 18.5,  // Larger wingback style
     weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -664,6 +679,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 85, width: 80, height: 90 },
     volume_ft3: 17.2,
     weight_kg: 20,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -677,6 +694,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 90, width: 85, height: 100 },
     volume_ft3: 22.0,  // Recliners are larger
     weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -690,6 +709,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 75, width: 75, height: 80 },
     volume_ft3: 14.8,
     weight_kg: 14,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -705,6 +726,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 50, height: 85 },
     volume_ft3: calcVolume(150, 50, 85),
     weight_kg: 70,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -718,6 +741,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 80, width: 45, height: 130 },
     volume_ft3: calcVolume(80, 45, 130),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -731,6 +756,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 40, height: 55 },
     volume_ft3: calcVolume(50, 40, 55),
     weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -744,6 +771,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 120, width: 60, height: 200 },
     volume_ft3: calcVolume(120, 60, 200),
     weight_kg: 100,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -757,6 +786,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 80, width: 30, height: 180 },
     volume_ft3: calcVolume(80, 30, 180),
     weight_kg: 40,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -770,6 +801,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 45, height: 55 },
     volume_ft3: calcVolume(150, 45, 55),
     weight_kg: 40,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -785,6 +818,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 75, width: 70, height: 170 },
     volume_ft3: calcVolume(75, 70, 170),
     weight_kg: 90,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -798,6 +833,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 90, width: 80, height: 180 },
     volume_ft3: calcVolume(90, 80, 180),
     weight_kg: 130,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -808,9 +845,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Washer',
     keywords: ['washing', 'machine', 'washer', 'front-load', 'laundry'],
-    dimensions_cm: { length: 70, width: 86, height: 99 },
-    volume_ft3: calcVolume(70, 86, 99),
+    dimensions_cm: { length: 60, width: 65, height: 85 },
+    volume_ft3: calcVolume(60, 65, 85),
     weight_kg: 75,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -821,9 +860,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Dryer',
     keywords: ['dryer', 'clothes', 'laundry', 'tumble'],
-    dimensions_cm: { length: 68, width: 84, height: 99 },
-    volume_ft3: calcVolume(68, 84, 99),
+    dimensions_cm: { length: 60, width: 65, height: 85 },
+    volume_ft3: calcVolume(60, 65, 85),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -837,6 +878,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 60, width: 60, height: 85 },
     volume_ft3: calcVolume(60, 60, 85),
     weight_kg: 45,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -850,6 +893,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 76, width: 70, height: 115 },
     volume_ft3: calcVolume(76, 70, 115),
     weight_kg: 70,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -863,6 +908,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 40, height: 30 },
     volume_ft3: calcVolume(50, 40, 30),
     weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -876,6 +923,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 60, width: 50, height: 40 },
     volume_ft3: calcVolume(60, 50, 40),
     weight_kg: 35,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -889,6 +938,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 45, width: 40, height: 80 },
     volume_ft3: calcVolume(45, 40, 80),
     weight_kg: 30,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -902,6 +953,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 110, width: 65, height: 85 },
     volume_ft3: calcVolume(110, 65, 85),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -915,6 +968,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 70, width: 65, height: 170 },
     volume_ft3: calcVolume(70, 65, 170),
     weight_kg: 80,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -928,6 +983,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 76, width: 70, height: 115 },
     volume_ft3: calcVolume(76, 70, 115),
     weight_kg: 80,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -938,9 +995,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Washer',
     keywords: ['washing', 'machine', 'washer', 'top-load', 'laundry'],
-    dimensions_cm: { length: 70, width: 76, height: 112 },
-    volume_ft3: calcVolume(70, 76, 112),
+    dimensions_cm: { length: 60, width: 60, height: 105 },
+    volume_ft3: calcVolume(60, 60, 105),
     weight_kg: 65,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -951,9 +1010,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Washer',
     keywords: ['washer', 'dryer', 'stacked', 'combo', 'laundry', 'stackable'],
-    dimensions_cm: { length: 68, width: 84, height: 183 },
-    volume_ft3: calcVolume(68, 84, 183),
+    dimensions_cm: { length: 65, width: 65, height: 180 },
+    volume_ft3: calcVolume(65, 65, 180),
     weight_kg: 130,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -964,9 +1025,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Refrigerator',
     keywords: ['mini', 'fridge', 'bar', 'small', 'refrigerator', 'compact', 'dorm'],
-    dimensions_cm: { length: 48, width: 52, height: 85 },
-    volume_ft3: calcVolume(48, 52, 85),
+    dimensions_cm: { length: 48, width: 45, height: 50 },
+    volume_ft3: calcVolume(48, 45, 50),
     weight_kg: 20,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -980,6 +1043,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 60, width: 60, height: 90 },
     volume_ft3: calcVolume(60, 60, 90),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -993,6 +1058,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 76, width: 50, height: 30 },
     volume_ft3: calcVolume(76, 50, 30),
     weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -1003,9 +1070,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Water Heater',
     keywords: ['water', 'heater', 'tank', 'hot', 'boiler'],
-    dimensions_cm: { length: 58, width: 58, height: 150 },
-    volume_ft3: calcVolume(58, 58, 150),
+    dimensions_cm: { length: 50, width: 50, height: 150 },
+    volume_ft3: calcVolume(50, 50, 150),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -1019,6 +1088,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 40, width: 25, height: 55 },
     volume_ft3: calcVolume(40, 25, 55),
     weight_kg: 8,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1032,6 +1103,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 40, width: 30, height: 60 },
     volume_ft3: calcVolume(40, 30, 60),
     weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1045,6 +1118,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 140, width: 60, height: 115 },
     volume_ft3: calcVolume(140, 60, 115),
     weight_kg: 50,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -1060,6 +1135,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 73, width: 7, height: 44 },
     volume_ft3: calcVolume(73, 7, 44),
     weight_kg: 5,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'high',
@@ -1073,6 +1150,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 92, width: 7, height: 54 },
     volume_ft3: calcVolume(92, 7, 54),
     weight_kg: 8,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'high',
@@ -1086,6 +1165,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 97, width: 7, height: 57 },
     volume_ft3: calcVolume(97, 7, 57),
     weight_kg: 9,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'high',
@@ -1099,6 +1180,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 113, width: 8, height: 66 },
     volume_ft3: calcVolume(113, 8, 66),
     weight_kg: 14,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'high',
     insurance_level: 'premium',
@@ -1112,6 +1195,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 125, width: 8, height: 72 },
     volume_ft3: calcVolume(125, 8, 72),
     weight_kg: 18,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'premium',
@@ -1125,6 +1210,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 145, width: 10, height: 85 },
     volume_ft3: calcVolume(145, 10, 85),
     weight_kg: 25,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'premium',
@@ -1138,6 +1225,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 168, width: 10, height: 97 },
     volume_ft3: calcVolume(168, 10, 97),
     weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1151,6 +1240,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 191, width: 12, height: 110 },
     volume_ft3: calcVolume(191, 12, 110),
     weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1164,6 +1255,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 70, width: 25, height: 50 },
     volume_ft3: calcVolume(70, 25, 50),
     weight_kg: 8,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'high',
@@ -1177,6 +1270,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 25, height: 50 },
     volume_ft3: calcVolume(50, 25, 50),
     weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'high',
@@ -1192,6 +1287,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 80, height: 90 },
     volume_ft3: calcVolume(150, 80, 90),
     weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -1205,6 +1302,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 55, height: 100 },
     volume_ft3: calcVolume(150, 55, 100),
     weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -1218,6 +1317,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 180, width: 60, height: 110 },
     volume_ft3: calcVolume(180, 60, 110),
     weight_kg: 15,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'medium',
     insurance_level: 'medium',
@@ -1233,6 +1334,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 150, width: 60, height: 130 },
     volume_ft3: calcVolume(150, 60, 130),
     weight_kg: 250,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1246,6 +1349,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 180, width: 80, height: 150 },
     volume_ft3: calcVolume(180, 80, 150),
     weight_kg: 100,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -1259,6 +1364,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 120, width: 55, height: 130 },
     volume_ft3: calcVolume(120, 55, 130),
     weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -1269,9 +1376,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Bed',
     subcategory: 'Mattress',
     keywords: ['mattress', 'twin', 'single', 'bed', 'foam', 'spring'],
-    dimensions_cm: { length: 191, width: 99, height: 25 },
-    volume_ft3: calcVolume(191, 99, 25),
+    dimensions_cm: { length: 191, width: 99, height: 20 },
+    volume_ft3: calcVolume(191, 99, 20),
     weight_kg: 20,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1285,6 +1394,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 191, width: 137, height: 22 },
     volume_ft3: calcVolume(191, 137, 22),
     weight_kg: 30,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1298,6 +1409,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 152, height: 25 },
     volume_ft3: calcVolume(203, 152, 25),
     weight_kg: 40,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -1311,6 +1424,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 193, height: 25 },
     volume_ft3: calcVolume(203, 193, 25),
     weight_kg: 50,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'standard',
@@ -1324,6 +1439,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 40, width: 30, height: 30 },
     volume_ft3: calcVolume(40, 30, 30),
     weight_kg: 15,  // Packed weight per single box
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1337,6 +1454,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 40, height: 40 },
     volume_ft3: calcVolume(50, 40, 40),
     weight_kg: 20,  // Packed weight per single box
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1350,6 +1469,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 60, width: 50, height: 50 },
     volume_ft3: calcVolume(60, 50, 50),
     weight_kg: 25,  // Packed weight per single box
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -1365,6 +1486,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 35, width: 15, height: 25 },
     volume_ft3: 0.5,
     weight_kg: 2,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1378,6 +1501,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 40, width: 12, height: 30 },
     volume_ft3: 0.5,
     weight_kg: 3,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1391,6 +1516,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 45, width: 30, height: 55 },
     volume_ft3: 2.6,
     weight_kg: 5,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1404,6 +1531,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 60, width: 30, height: 35 },
     volume_ft3: 2.2,
     weight_kg: 8,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1417,6 +1546,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 55, width: 25, height: 35 },
     volume_ft3: 1.7,
     weight_kg: 6,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1430,6 +1561,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 55, width: 35, height: 23 },
     volume_ft3: 1.6,
     weight_kg: 10,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1443,6 +1576,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 68, width: 45, height: 28 },
     volume_ft3: 3.0,
     weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1456,6 +1591,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 78, width: 52, height: 32 },
     volume_ft3: 4.6,
     weight_kg: 23,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1469,6 +1606,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 40, width: 15, height: 35 },
     volume_ft3: 0.7,
     weight_kg: 3,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1482,6 +1621,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 40, height: 60 },
     volume_ft3: 4.2,
     weight_kg: 10,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1495,6 +1636,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 60, width: 5, height: 100 },
     volume_ft3: 1.1,
     weight_kg: 4,
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
@@ -1509,6 +1652,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 91, width: 84, height: 178 },
     volume_ft3: calcVolume(91, 84, 178),
     weight_kg: 138,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1522,6 +1667,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 185, width: 6, height: 105 },
     volume_ft3: calcVolume(185, 6, 105),
     weight_kg: 48,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1535,6 +1682,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 191, width: 6, height: 109 },
     volume_ft3: calcVolume(191, 6, 109),
     weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1548,6 +1697,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 219, width: 4, height: 125 },
     volume_ft3: calcVolume(219, 4, 125),
     weight_kg: 62,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1561,6 +1712,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 161, width: 149, height: 101 },
     volume_ft3: calcVolume(161, 149, 101),
     weight_kg: 290,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1571,9 +1724,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Other',
     subcategory: 'Piano',
     keywords: ['piano', 'grand piano', 'concert', 'full size', 'music', 'instrument', 'yamaha', 'steinway', 'C3X', 'model O', 'C2X'],
-    dimensions_cm: { length: 272, width: 149, height: 101 },
-    volume_ft3: calcVolume(272, 149, 101),
+    dimensions_cm: { length: 186, width: 149, height: 101 },
+    volume_ft3: calcVolume(186, 149, 101),
     weight_kg: 325,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1587,6 +1742,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 213, width: 213, height: 90 },
     volume_ft3: calcVolume(213, 213, 90),
     weight_kg: 450,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1600,6 +1757,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 185, width: 185, height: 85 },
     volume_ft3: calcVolume(185, 185, 85),
     weight_kg: 300,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1610,9 +1769,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Other',
     subcategory: 'Safe',
     keywords: ['gun safe', 'safe', 'firearm', 'liberty', 'stack-on', 'vault', 'security', 'steel', 'heavy', 'rifle', 'storage'],
-    dimensions_cm: { length: 56, width: 76, height: 154 },
-    volume_ft3: calcVolume(56, 76, 154),
+    dimensions_cm: { length: 107, width: 70, height: 184 },
+    volume_ft3: calcVolume(107, 70, 184),
     weight_kg: 422,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1626,6 +1787,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 90, width: 55, height: 150 },
     volume_ft3: calcVolume(90, 55, 150),
     weight_kg: 180,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1639,6 +1802,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 257, width: 145, height: 81 },
     volume_ft3: calcVolume(257, 145, 81),
     weight_kg: 409,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1652,6 +1817,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 284, width: 158, height: 81 },
     volume_ft3: calcVolume(284, 158, 81),
     weight_kg: 520,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1665,6 +1832,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 160, width: 125, height: 211 },
     volume_ft3: calcVolume(160, 125, 211),
     weight_kg: 100,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -1678,6 +1847,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 192, height: 40 },
     volume_ft3: calcVolume(203, 192, 40),
     weight_kg: 100,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -1691,6 +1862,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 153, height: 40 },
     volume_ft3: calcVolume(203, 153, 40),
     weight_kg: 75,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -1704,6 +1877,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 145, width: 80, height: 125 },
     volume_ft3: calcVolume(145, 80, 125),
     weight_kg: 105,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1717,6 +1892,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 140, width: 69, height: 192 },
     volume_ft3: calcVolume(140, 69, 192),
     weight_kg: 113,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -1730,6 +1907,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 76, width: 61, height: 178 },
     volume_ft3: calcVolume(76, 61, 178),
     weight_kg: 80,
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'high',
@@ -1743,23 +1922,23 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 220, width: 80, height: 110 },
     volume_ft3: calcVolume(220, 80, 110),
     weight_kg: 200,
+    load_size: 'large',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
   },
   {
     item_id: 'MOTORCYCLE_HEAVY_001',
-    // Brand out of the display name — this is the only row that carried one, and
-    // the name is customer-facing on the quote. 'harley' and 'davidson' stay in
-    // the keywords, which is where brand belongs: they help the matcher catch
-    // what the vision model says without putting a trademark on an invoice.
-    name: 'Motorcycle (touring / full-dress bagger)',
+    name: 'Motorcycle (touring / Harley-Davidson)',
     category: 'Other',
     subcategory: 'Vehicle',
     keywords: ['motorcycle', 'touring', 'harley', 'davidson', 'road king', 'ultra', 'electra glide', 'heavy cruiser', 'bagger'],
     dimensions_cm: { length: 240, width: 95, height: 120 },
     volume_ft3: calcVolume(240, 95, 120),
     weight_kg: 357,
+    load_size: 'apartment',
+    vehicle: 'truck',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1805,102 +1984,20 @@ export function searchItemsByKeywords(keywords: string[]): FurnitureItem[] {
  * IMPROVED: Prevents false positives like "accent chair" → "AC (air conditioner)"
  * by requiring longer word matches and prioritizing exact category matches.
  */
-/**
- * Best ground-truth row for a vision-supplied item name.
- *
- * `hintVolumeFt3` is the volume the vision model's own estimated dimensions
- * imply. Scores alone cannot separate the small/medium/large variants of one
- * product family — every "U-shaped sectional sofa" row earns an identical score
- * — so without the hint the winner is just whichever sits earliest in the array.
- * The hint breaks those exact ties by picking the size closest to what the model
- * actually measured.
- */
-export function findBestMatch(
-  itemName: string,
-  hintVolumeFt3?: number,
-  hintSubcategory?: string,
-): { item: FurnitureItem; similarity: number } | null {
-  // The vision model's subcategory, as a hint. Never a gate: a mismatch costs
-  // nothing, so wiring it in cannot make a currently-correct match fail.
-  //
-  // Two layers, because the stored subcategories are coarse. All six sectional
-  // rows carry subcategory 'Sectional' and all six sofa-bed rows carry
-  // 'Sofa Bed', so a subcategory-to-subcategory comparison gives every tying row
-  // the same bonus and changes no ranking. What the model actually returns
-  // ("pull-out queen sleeper", "U-shaped large", "baby grand") overlaps the row
-  // NAME, so the second layer scores its tokens against name + keywords.
-  const subHint = (hintSubcategory ?? '').toLowerCase().trim();
-  const subHintUsable = subHint.length > 0 && subHint !== 'unknown';
-  const subHintTokens = subHintUsable
-    ? subHint.split(/\s+/).filter(t => t.length >= 3)
-    : [];
-  // Normalise the sofa-bed spellings to the one the rows actually carry. The
-  // keyword bonus below is a substring test against the query, so the 'sofa bed'
-  // keyword could never fire on "sofabed" or "sofa-bed" — one missing space made
-  // every sofa-bed row unreachable while 'sofa' still matched, handing the win to
-  // the first ordinary sofa in the array.
-  const nameLower = itemName.toLowerCase().replace(/sofa[\s-]?bed/g, 'sofa bed');
-  // Length >= 2, not > 2. 'TV' and 'AC' were being discarded outright, so
-  // "large TV" collapsed to just ["large"] and confidently matched "Large
-  // L-shaped sectional sofa" at 1.000 — 258.72 ft3 quoted for a television.
-  // Safe because a word under 4 chars can only ever EXACT match: the partial
-  // branch below requires both sides to be 4+, which is what kept 'ac' from
-  // matching 'accent'.
-  const allWords = nameLower.split(/\s+/).filter(w => w.length >= 2);
-
-  // Only words that SOME row can match count toward the denominator.
-  //
-  // Every word used to add 3 to totalWeight whether or not it could ever match
-  // anything, so a score was diluted linearly by pure description. The same item
-  // scored 1.000 as "3-seater sofa" and 0.611 as "large grey fabric modern
-  // 3-seater sofa" — correctly ranked first both times, but under the 0.70
-  // threshold at six words, so it was discarded in favour of a Layer-2 estimate.
-  // Colours, finishes and filler adjectives are noise, not evidence of a
-  // mismatch, and the prompt asks the model for exactly that kind of detail.
-  const nameWords = allWords.filter(word =>
-    FURNITURE_DATABASE.some(item => {
-      const haystack = [
-        ...item.name.toLowerCase().split(/\s+/),
-        ...item.keywords,
-        item.subcategory.toLowerCase(),
-      ];
-      return haystack.some(iw => {
-        if (iw === word) return true;
-        if (Math.min(iw.length, word.length) < 4) return false;
-        return iw.includes(word) || word.includes(iw);
-      });
-    }),
-  );
+export function findBestMatch(itemName: string): { item: FurnitureItem; similarity: number } | null {
+  const nameLower = itemName.toLowerCase();
+  const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
   
-  // Extract key category hints from the input name.
-  //
-  // Word-boundary matched, not substring: `includes('table')` fired on
-  // "Portable air conditioner" and "Portable heater", so both took the 0.5
-  // category-mismatch penalty against their own row and scored 0.611 — under
-  // the 0.70 threshold, which meant neither could ever resolve to ground truth.
-  const word = (w: string) => new RegExp(`\\b${w}\\b`).test(nameLower);
-  const hasChairHint = word('chair');
-  const hasSofaHint = word('sofa') || word('couch');
-  const hasBedHint = word('bed');
-  // A sofa bed names both families, so the two hints above fight each other:
-  // hasBedHint fired a 0.5 mismatch penalty on the correct row, because a sofa
-  // bed is category 'Sofa', not 'Bed'. Recognising the compound lets the Sofa Bed
-  // subcategory be scored on its own terms instead of being penalised for its name.
-  const hasSofaBedHint =
-    nameLower.includes('sofa bed') ||
-    nameLower.includes('sleeper') ||
-    nameLower.includes('pull-out sofa');
-  // 'desk' must not fire on "desktop": a 2.21 ft3 "Desktop computer (tower)"
-  // was earning the Table bonus and matching "Office desk (standard)" at
-  // 29.8 ft3, a 13x overestimate.
-  // The old 'desktop' guard is now redundant — \bdesk\b does not match
-  // "desktop" — but it is kept so the intent stays readable.
-  const hasTableHint =
-    word('table') || (word('desk') && !nameLower.includes('desktop'));
+  // Extract key category hints from the input name
+  const hasChairHint = nameLower.includes('chair');
+  const hasSofaBedHint = (nameLower.includes('sofa bed') || nameLower.includes('sofa-bed') ||
+    nameLower.includes('sleeper') || nameLower.includes('pull-out') || nameLower.includes('pullout'));
+  const hasSofaHint = !hasSofaBedHint && (nameLower.includes('sofa') || nameLower.includes('couch'));
+  const hasBedHint = !hasSofaBedHint && nameLower.includes('bed');
+  const hasTableHint = nameLower.includes('table') || nameLower.includes('desk');
   
   let bestMatch: FurnitureItem | null = null;
   let bestScore = 0;
-  const candidates: { item: FurnitureItem; score: number }[] = [];
   
   for (const item of FURNITURE_DATABASE) {
     const itemNameLower = item.name.toLowerCase();
@@ -1908,55 +2005,12 @@ export function findBestMatch(
     const allItemWords = [...itemNameLower.split(/\s+/), ...itemKeywords];
     
     // CATEGORY MISMATCH PENALTY: If input clearly says "chair" but item is not a Chair, penalize heavily
-    //
-    // 'Other' is exempt. It is the catch-all for pianos, pool tables, hot tubs,
-    // safes, massage chairs and treadmills, so penalising it for containing a
-    // family word is always wrong: "Pool table" lost half its score to the table
-    // hint and was beaten by "Dining table (4-person)" — 106.6 ft3 quoted as
-    // 31.78 — and "Massage chair" lost half to the chair hint.
     let categoryMismatchPenalty = 0;
-    // Declared out here: the category-match bonuses below read it too.
-    const isSofaBedRow = item.subcategory === 'Sofa Bed';
-    // A row is only penalised for a family word it does not itself carry.
-    //
-    // The penalty exists to stop "accent chair" matching an air conditioner, not
-    // to punish a row whose own name contains the word. Three rows were losing
-    // half their score to a word printed on them: "Pool table" and
-    // "Nightstand / Bedside table" (category Other and Dresser, both containing
-    // "table") and "Massage chair" (category Other, containing "chair").
-    const rowText = `${itemNameLower} ${item.keywords.join(' ')}`;
-    const rowHas = (w: string) => new RegExp(`\\b${w}\\b`).test(rowText);
-    {
-      if (hasChairHint && item.category !== 'Chair' && !rowHas('chair')) {
-        categoryMismatchPenalty = 0.5;
-      }
-      if (
-        hasSofaHint &&
-        item.category !== 'Sofa' &&
-        !rowHas('sofa') &&
-        !rowHas('couch')
-      ) {
-        categoryMismatchPenalty = 0.5;
-      }
-    // A Sofa Bed row is exempt: it is category 'Sofa' by design, so the bed hint
-    // would otherwise penalise the one family the query actually named.
-      if (
-        hasBedHint &&
-        item.category !== 'Bed' &&
-        !(hasSofaBedHint && isSofaBedRow) &&
-        !rowHas('bed')
-      ) {
-        categoryMismatchPenalty = 0.5;
-      }
-      if (
-        hasTableHint &&
-        item.category !== 'Table' &&
-        !rowHas('table') &&
-        !rowHas('desk')
-      ) {
-        categoryMismatchPenalty = 0.5;
-      }
-    }
+    if (hasChairHint && item.category !== 'Chair') categoryMismatchPenalty = 0.5;
+    if (hasSofaBedHint && item.subcategory !== 'Sofa Bed') categoryMismatchPenalty = 0.5;
+    if (hasSofaHint && item.category !== 'Sofa') categoryMismatchPenalty = 0.5;
+    if (hasBedHint && item.category !== 'Bed') categoryMismatchPenalty = 0.5;
+    if (hasTableHint && item.category !== 'Table') categoryMismatchPenalty = 0.5;
     
     // Calculate similarity based on word matching
     let matchCount = 0;
@@ -1980,13 +2034,6 @@ export function findBestMatch(
         matchCount += 1;
         totalWeight += 3;
       } else {
-        // Full weight, deliberately. Dropping a miss to 1 lifted every verbose
-        // name over the threshold, but it also turned two safe rejections into
-        // confident errors: "Black folding electric treadmill" resolved to
-        // "Recliner sofa (3-seat)" at 1.000 on the shared keyword 'electric',
-        // and "Office desk (standard)" lost to "L-shaped desk". A rejection
-        // falls through to a Layer-2 estimate, which is wrong by a margin; a
-        // confident wrong row is wrong by a vehicle class.
         totalWeight += 3;
       }
     }
@@ -2001,107 +2048,24 @@ export function findBestMatch(
     
     // CATEGORY MATCH BONUS: If category explicitly matches, boost score
     if (hasChairHint && item.category === 'Chair') matchCount += 2;
+    if (hasSofaBedHint && item.subcategory === 'Sofa Bed') matchCount += 2;
     if (hasSofaHint && item.category === 'Sofa') matchCount += 2;
-    // Same weight as the category bonuses above, but keyed on subcategory: the
-    // competing rows are all category 'Sofa', so only the subcategory separates
-    // them. The -1 keeps an ordinary sofa from winning on its shared keywords.
-    if (hasSofaBedHint && isSofaBedRow) matchCount += 2;
-    if (hasSofaBedHint && item.category === 'Sofa' && !isSofaBedRow) matchCount -= 1;
     if (hasBedHint && item.category === 'Bed') matchCount += 2;
     if (hasTableHint && item.category === 'Table') matchCount += 2;
     
-    // Rank on the UNCLAMPED ratio. Clamping here with Math.min(..., 1) flattened
-    // every strong candidate to exactly 1.0, and because the comparison below is
-    // a strict `>`, the winner among them was whichever came first in the array.
-    // "U-shaped sectional sofa" scored 1.78 on the U-shaped rows and 1.22 on the
-    // L-shaped ones, yet returned "Small L-shaped sectional sofa (2-piece,
-    // apartment-size)" at 103.56 ft3 purely because L-shaped is listed earlier.
-    // The clamp now applies only to the similarity that is reported out.
-    let score = totalWeight > 0 ? matchCount / totalWeight : 0;
+    let similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
     
     // Apply category mismatch penalty
-    score = score * (1 - categoryMismatchPenalty);
-
-    // SUBCATEGORY HINT — additive only, applied after the name-token score so
-    // the 0.70 threshold keeps its existing meaning for every row that already
-    // cleared it.
-    if (subHintUsable) {
-      const rowSub = item.subcategory.toLowerCase().trim();
-      // Layer 1: subcategory vs subcategory.
-      if (rowSub === subHint) {
-        score += 0.15;
-      } else if (
-        rowSub.length >= 4 &&
-        subHint.length >= 4 &&
-        (rowSub.includes(subHint) || subHint.includes(rowSub))
-      ) {
-        score += 0.08;
-      }
-      // Layer 2: the hint's own words against this row's name and keywords.
-      // Capped so it can lift a size variant past its siblings without ever
-      // outweighing the name match that chose the family.
-      if (subHintTokens.length > 0) {
-        const haystack = `${itemNameLower} ${item.keywords.join(' ')}`;
-        const hits = subHintTokens.filter(t => haystack.includes(t)).length;
-        score += Math.min(hits * 0.06, 0.18);
-      }
-    }
+    similarity = similarity * (1 - categoryMismatchPenalty);
     
-    candidates.push({ item, score });
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = item;
-    } else if (
-      bestMatch !== null &&
-      hintVolumeFt3 !== undefined &&
-      Math.abs(score - bestScore) < 1e-9 &&
-      Math.abs(item.volume_ft3 - hintVolumeFt3) <
-        Math.abs(bestMatch.volume_ft3 - hintVolumeFt3)
-    ) {
-      // Genuine tie: prefer the size the vision estimate is closest to.
+    if (similarity > bestScore) {
+      bestScore = similarity;
       bestMatch = item;
     }
   }
   
-  // VOLUME SANITY BOUND. The score above is pure token overlap, so a near-tie
-  // between size variants of the same shape is decided by wording, not size —
-  // the comment on the clamp records a U-shaped query returning a 103.56ft3
-  // small L-sectional. When the winner is wildly off the vision estimate and a
-  // comparably-scored row is not, take the plausible one. The tie-break above
-  // only fires on exact float equality; this covers the near-ties it misses.
-  if (bestMatch && hintVolumeFt3 !== undefined && hintVolumeFt3 > 0) {
-    const ratio = bestMatch.volume_ft3 / hintVolumeFt3;
-    if (ratio > 3 || ratio < 1 / 3) {
-      const rescued = candidates
-        .filter(c => {
-          if (c.item === bestMatch) return false;
-          if (c.score < bestScore * 0.85) return false;
-          const r = c.item.volume_ft3 / hintVolumeFt3;
-          return r <= 2 && r >= 0.5;
-        })
-        .sort(
-          (a, b) =>
-            Math.abs(a.item.volume_ft3 - hintVolumeFt3) -
-            Math.abs(b.item.volume_ft3 - hintVolumeFt3),
-        )[0];
-      if (rescued) {
-        console.warn(
-          '[findBestMatch] volume sanity bound: "%s" (%sft3, score %s) is %sx the %sft3 estimate; using "%s" (%sft3, score %s) instead',
-          bestMatch.name, bestMatch.volume_ft3, bestScore.toFixed(3),
-          ratio.toFixed(2), hintVolumeFt3.toFixed(1),
-          rescued.item.name, rescued.item.volume_ft3, rescued.score.toFixed(3),
-        );
-        bestMatch = rescued.item;
-        bestScore = rescued.score;
-      }
-    }
-  }
-
   if (bestMatch && bestScore > 0.3) {  // Minimum threshold for a match
-    // Report a bounded similarity: SIMILARITY_THRESHOLD and the confidence
-    // surfaced to the customer both assume 0..1.
-    return { item: bestMatch, similarity: Math.min(bestScore, 1) };
+    return { item: bestMatch, similarity: bestScore };
   }
   
   return null;
@@ -2111,22 +2075,19 @@ export function findBestMatch(
  * ===== VEHICLE SELECTION THRESHOLDS =====
  * Single source of truth for volume-to-vehicle mapping
  * 
- * Raw ft³ boundaries, matching VEHICLE_CLASS_MAX_RAW_FT3 in shared/pricing.ts
- * exactly.
- *
- * Not imported from pricing.ts because shared/pricing.ts imports from this file;
- * taking the dependency the other way would make the cycle. Any change to
- * VEHICLE_CLASS_MAX_RAW_FT3 has to be mirrored here.
- *   ≤20 ft³    → SUV (car)                 - Single chair, few boxes  [Class A]
- *   ≤130 ft³   → Pickup Truck (pickup)     - Medium furniture         [Class B]
- *   ≤255 ft³   → Cargo Van (van)           - Bedroom sets, apartments [Class C]
- *   >255 ft³   → Moving Truck (truck)      - Full apartment           [Class E]
+ * Updated thresholds (2026):
+ * Raw ft³ boundaries aligned with getVehicleClassFromVolume in shared/pricing.ts
+ * (adjusted-volume thresholds of 60/150/350 divided by packingFactor 1.10):
+ *   ≤54 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes  [Class A]
+ *   ≤136 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
+ *   ≤318 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
+ *   >318 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
-  CAR_MAX: 20,      // raw ≤ 20 ft³   → Class A (SUV)
-  PICKUP_MAX: 130,  // raw ≤ 130 ft³  → Class B (Pickup Truck)
-  VAN_MAX: 255,     // raw ≤ 255 ft³  → Class C (Cargo Van)
-  // Above 255 ft³ → Class E (Moving Truck)
+  CAR_MAX: 54,       // raw ≤ 54 ft³   → Class A (SUV)
+  PICKUP_MAX: 136,   // raw ≤ 136 ft³  → Class B (Pickup Truck)
+  VAN_MAX: 260,      // raw ≤ 260 ft³  → Class C (Cargo Van)
+  // Above 318 ft³ → Class E (Moving Truck)
 };
 
 /**
@@ -2134,10 +2095,10 @@ export const VEHICLE_VOLUME_THRESHOLDS = {
  * Note: This uses TOTAL volume including quantity
  */
 export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // Class A
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // Class B
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'large';     // Class C
-  return 'apartment';  // Class E
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // ≤54 ft³ → Class A
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // ≤136 ft³ → Class B
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'large';     // ≤318 ft³ → Class C
+  return 'apartment';  // >318 ft³ → Class E
 }
 
 /**
@@ -2145,10 +2106,10 @@ export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
  * This is the preferred method - uses volume directly without load size
  */
 export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // Class A
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // Class B
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // Class C
-  return 'truck';  // Class E
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // ≤54 ft³ → Class A
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // ≤136 ft³ → Class B
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // ≤318 ft³ → Class C
+  return 'truck';  // >318 ft³ → Class E
 }
 
 /**
@@ -2186,5 +2147,11 @@ export function getVehicleRecommendation(loadSize: LoadSizeCategory, weightKg: n
  * Human-readable vehicle name for UI display
  */
 export function getVehicleDisplayName(vehicle: VehicleType): string {
-  return VEHICLE_DISPLAY_NAMES[vehicle] ?? 'Vehicle';
+  switch (vehicle) {
+    case 'car': return 'SUV / Small Vehicle';
+    case 'van': return 'Cargo Van';
+    case 'pickup': return 'Pickup Truck';
+    case 'truck': return 'Moving Truck (Large)';
+    default: return 'Vehicle';
+  }
 }

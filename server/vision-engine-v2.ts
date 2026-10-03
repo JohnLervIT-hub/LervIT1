@@ -51,13 +51,14 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
 const SIMILARITY_THRESHOLD = 0.70;  // Match threshold for using database values
+const HIGH_CONFIDENCE_THRESHOLD = 0.85;  // When to fully trust database match
 
 // AUTOGEN:REF_DIMS:START — regenerate with: npm run generate:dims (source: shared/furniture-database.ts)
-const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (plausibility anchors only — if the photo shows something different, trust the photo):
+const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (use these):
 
 BEDS:
 • Twin bed frame (standard): ~191×99×40cm, 35kg
-• Twin bed frame with storage drawers: ~200×107×42cm, 55kg
+• Twin bed frame with storage drawers: ~191×99×43cm, 55kg
 • Full/Double bed frame: ~191×137×40cm, 45kg
 • Queen bed frame: ~203×152×40cm, 55kg
 • Queen platform bed with headboard: ~210×165×110cm, 75kg
@@ -65,7 +66,7 @@ BEDS:
 • Bunk bed (twin over twin): ~200×100×170cm, 80kg
 • Crib / Toddler bed: ~130×70×100cm, 20kg
 • Daybed with trundle: ~200×100×90cm, 55kg
-• Twin mattress: ~191×99×25cm, 20kg
+• Twin mattress: ~191×99×20cm, 20kg
 • Full/Double mattress: ~191×137×22cm, 30kg
 • Queen mattress: ~203×152×25cm, 40kg
 • King mattress: ~203×193×25cm, 50kg
@@ -75,19 +76,21 @@ BEDS:
 SOFAS:
 • 2-seater loveseat sofa: ~150×85×85cm, 45kg
 • 3-seater sofa: ~210×90×85cm, 70kg
+• Small L-shaped sectional sofa (2-piece, apartment-size): ~230×150×85cm, 70kg
+• Medium L-shaped sectional sofa (3-piece, standard): ~300×180×85cm, 120kg
+• Large L-shaped sectional sofa (4-5 piece, deep-seat, oversized): ~370×220×90cm, 170kg
+• Small U-shaped sectional sofa (compact, 3-piece): ~280×200×85cm, 130kg
+• Medium U-shaped sectional sofa (standard, 4-5 piece): ~350×250×85cm, 180kg
+• Large U-shaped sectional sofa (oversized, 6+ piece): ~420×300×90cm, 240kg
 • Twin sofa bed (loveseat sleeper, pull-out twin): ~170×90×85cm, 55kg
 • Full/Double sofa bed (3-seat sleeper, pull-out double): ~200×95×85cm, 75kg
 • Queen sofa bed (large sleeper, pull-out queen): ~230×100×90cm, 95kg
 • Small sectional sofa bed (2-piece L-shaped with pull-out sleeper): ~250×170×85cm, 110kg
 • Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage): ~290×200×90cm, 145kg
 • Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage): ~340×220×90cm, 180kg
-• Recliner sofa (3-seat): ~230×100×100cm, 110kg
-• Round cuddle sofa / snuggler: ~160×130×85cm, 85kg
-• Curved / crescent sofa (3-seat): ~280×120×85cm, 90kg
-• Chaise lounge: ~165×65×88cm, 35kg
 
 TABLES:
-• Dining table (4-person): ~120×100×75cm, 35kg
+• Dining table (4-person): ~120×75×75cm, 35kg
 • Dining table (6-person): ~180×90×75cm, 50kg
 • Dining table (8-person): ~240×100×75cm, 70kg
 • Coffee table: ~120×60×45cm, 25kg
@@ -98,6 +101,7 @@ TABLES:
 • Standing desk (electric): ~150×75×125cm, 55kg
 
 CHAIRS:
+• Recliner sofa (3-seat): ~230×100×100cm, 110kg
 • Armchair / Accent chair: ~85×85×90cm, 30kg
 • Single recliner chair: ~90×85×100cm, 45kg
 • Dining chair: ~45×50×90cm, 8kg
@@ -120,8 +124,8 @@ STORAGE:
 APPLIANCES:
 • Refrigerator (standard top-freezer): ~75×70×170cm, 90kg
 • French door refrigerator: ~90×80×180cm, 130kg
-• Washing machine (front-load): ~70×86×99cm, 75kg
-• Clothes dryer: ~68×84×99cm, 55kg
+• Washing machine (front-load): ~60×65×85cm, 75kg
+• Clothes dryer: ~60×65×85cm, 55kg
 • Dishwasher: ~60×60×85cm, 45kg
 • Stove / Range (electric): ~76×70×115cm, 70kg
 • Microwave (countertop): ~50×40×30cm, 15kg
@@ -130,12 +134,12 @@ APPLIANCES:
 • Chest freezer: ~110×65×85cm, 55kg
 • Upright freezer: ~70×65×170cm, 80kg
 • Stove / Range (gas): ~76×70×115cm, 80kg
-• Washing machine (top-load): ~70×76×112cm, 65kg
-• Stacked washer/dryer combo: ~68×84×183cm, 130kg
-• Mini fridge / Bar fridge: ~48×52×85cm, 20kg
+• Washing machine (top-load): ~60×60×105cm, 65kg
+• Stacked washer/dryer combo: ~65×65×180cm, 130kg
+• Mini fridge / Bar fridge: ~48×45×50cm, 20kg
 • Wall oven: ~60×60×90cm, 55kg
 • Range hood / Exhaust hood: ~76×50×30cm, 15kg
-• Water heater (tank): ~58×58×150cm, 55kg
+• Water heater (tank): ~50×50×150cm, 55kg
 • Space heater / Portable heater: ~40×25×55cm, 8kg
 • Dehumidifier: ~40×30×60cm, 15kg
 • French door refrigerator (4-door, large): ~91×84×178cm, 138kg
@@ -172,10 +176,10 @@ SPECIALTY:
 • Moving box (medium): ~50×40×40cm, 20kg
 • Moving box (large): ~60×50×50cm, 25kg
 • Baby grand piano: ~161×149×101cm, 290kg
-• Grand piano (concert / full size): ~272×149×101cm, 325kg
+• Grand piano (concert / full size): ~186×149×101cm, 325kg
 • Hot tub / Spa (6-person): ~213×213×90cm, 450kg
 • Hot tub / Spa (4-person): ~185×185×85cm, 300kg
-• Gun safe (large, 30+ gun capacity): ~56×76×154cm, 422kg
+• Gun safe (large, 30+ gun capacity): ~107×70×184cm, 422kg
 • Gun safe (medium, 12-24 gun capacity): ~90×55×150cm, 180kg
 • Pool table / Billiard table (8-foot): ~257×145×81cm, 409kg
 • Pool table / Billiard table (9-foot): ~284×158×81cm, 520kg
@@ -183,7 +187,7 @@ SPECIALTY:
 • Pinball machine: ~140×69×192cm, 113kg
 • Arcade game cabinet (upright): ~76×61×178cm, 80kg
 • Motorcycle (standard / cruiser): ~220×80×110cm, 200kg
-• Motorcycle (touring / full-dress bagger): ~240×95×120cm, 357kg
+• Motorcycle (touring / Harley-Davidson): ~240×95×120cm, 357kg
 
 LUGGAGE:
 • Handbag / Purse: ~35×15×25cm, 2kg
@@ -233,11 +237,6 @@ export interface VisionEngineResult {
   // qualifies for a special-handling surcharge (piano, refrigerator, hot tub…).
   // Null for standard household items.
   premiumKey?: string | null;
-  // False when the photo is a close-up or partial shot. Such a photo can be
-  // identified but not measured — there is no way to know what else is in the
-  // room — so the quote flow rejects it rather than pricing a fragment.
-  // Defaults true, including when vision is unavailable.
-  fullSceneConfirmed: boolean;
 }
 
 /**
@@ -460,18 +459,11 @@ function correctCategory(itemName: string, detectedCategory: string): {
   const nameLower = itemName.toLowerCase();
   
   // Check if item name contains chair keywords but was misclassified
-  // No bare 'seat': it is a substring of 'loveseat', '3-seater' and '3-seat
-  // sleeper', all names this prompt actively asks the model to produce, and the
-  // chair branch runs first — so every seat-counted sofa and sofa bed was being
-  // relabelled 'Chair'.
-  const chairKeywords = ['chair', 'armchair', 'recliner', 'stool'];
+  const chairKeywords = ['chair', 'armchair', 'recliner', 'seat', 'stool'];
   const sofaKeywords = ['sofa', 'couch', 'loveseat', 'sectional', 'futon', 'sofa bed', 'sleeper'];
   const bedKeywords = ['bed', 'mattress', 'bunk', 'crib'];
-  // No bare 'stand' either: it caught 'nightstand' (a Dresser row) before the
-  // dresser branch could, and sent 'TV stand' to Table when that row is Storage.
-  // 'desk' still covers the standing-desk case.
-  const tableKeywords = ['table', 'desk'];
-  const dresserKeywords = ['dresser', 'chest', 'drawer', 'wardrobe', 'cabinet', 'nightstand', 'night stand', 'bedside'];
+  const tableKeywords = ['table', 'desk', 'stand', 'nightstand'];
+  const dresserKeywords = ['dresser', 'chest', 'drawer', 'wardrobe', 'cabinet'];
   
   if (chairKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Chair') {
     console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Chair (detected "${itemName}")`);
@@ -483,19 +475,14 @@ function correctCategory(itemName: string, detectedCategory: string): {
     return { category: 'Sofa', wasCorrected: true, originalCategory: detectedCategory };
   }
   
-  // 'bedside' is excluded: 'Nightstand / Bedside table' is a Dresser row, but
-  // the bare 'bed' keyword would claim it here, two branches early.
-  const isBedside = nameLower.includes('bedside') || nameLower.includes('night stand') || nameLower.includes('nightstand');
-  if (!isBedside && bedKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Bed') {
+  if (bedKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Bed') {
     console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Bed (detected "${itemName}")`);
     return { category: 'Bed', wasCorrected: true, originalCategory: detectedCategory };
   }
   
   if (tableKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Table') {
-    // Don't correct if it's actually a nightstand / bedside table (a Dresser row).
-    // The pre-existing guard only tested 'nightstand', so "Bedside table" still
-    // landed on Table via the bare 'table' keyword.
-    if (!isBedside) {
+    // Don't correct if it's actually a nightstand (which is a Dresser)
+    if (!nameLower.includes('nightstand')) {
       console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Table (detected "${itemName}")`);
       return { category: 'Table', wasCorrected: true, originalCategory: detectedCategory };
     }
@@ -629,17 +616,9 @@ interface VisionDetectionResult {
     width_cm: number;
     height_cm: number;
   };
-  /** calculateVolumeFt3 of estimatedDimensions, or null when the model gave none. */
-  estimatedVolumeFt3?: number | null;
-  brand?: string | null;
-  material?: string | null;
-  style?: string | null;
-  color?: string | null;
-  /** One sentence on the cues behind the size estimate. Logged, not persisted. */
-  reasoning?: string | null;
   estimatedWeight?: number;
   quantity?: number;
-  /** False only when the item is genuinely unidentifiable — see the fullScene prompt field. */
+  /** true = identifiable item visible; false = fragment/unrecognisable — reject */
   fullScene?: boolean;
 }
 
@@ -670,8 +649,7 @@ async function detectItemWithVision(imageBase64: string): Promise<VisionDetectio
 Analyze this image and identify the item with maximum detail.
 
 ITEM IDENTIFICATION:
-Identify the PRIMARY item in the image — the most prominent/dominant item.
-A room-wide shot showing many items is fine: pick the dominant one.
+Identify the PRIMARY item occupying ≥85% of the visual frame.
 
 For FURNITURE SETS (dining table with chairs, bed with headboard, sofa with ottoman):
 - Identify the DOMINANT item as the primary
@@ -686,36 +664,44 @@ IGNORE:
 - Items at edges clearly not the subject
 
 IDENTIFY:
-1. Item type (be specific: "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
+1. Item type (be specific: "Small L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
 3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
-4. Size indicators (Queen, King, 3-seater, etc.) — these DO belong in
-   "itemName": they decide which size variant of an item is matched. The ONE
-   exception is sectionals, which are shape-only — see SECTIONAL SIZE below.
-5. Material if visible (leather, fabric, wood, metal, glass) — note it only when
-   it genuinely identifies the item (e.g. "leather recliner"). Do NOT pad
-   "itemName" with colours, finishes or filler adjectives: "grey modern fabric
-   3-seater sofa" identifies nothing that "3-seater sofa" does not.
+4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
+5. Material if visible (leather, fabric, wood, metal, glass)
 
-SECTIONAL SHAPE — DECIDE THIS FIRST, BEFORE SIZE:
-Count the ARMS/RETURNS that turn away from the longest run of seating:
-• ONE return (the seating turns a single corner, forming an "L") = L-SHAPED.
-• TWO returns, one at EACH end, facing each other across the room, so the
-  seating wraps three sides of the space = U-SHAPED. Sometimes sold as a "pit"
-  or "theater" sectional.
-Check this deliberately. A U-shaped sectional photographed from one end can look
-L-shaped because the far return is foreshortened or cropped — look for seating
-coming back toward the camera on BOTH sides. If you can see two opposing returns,
-it is U-SHAPED even when only part of the second one is visible.
-Do not default to L-shaped: state the shape you can actually see.
+SECTIONAL SHAPE DETECTION (CRITICAL — perform this check BEFORE classifying size):
+Misidentifying U-shaped sectionals as L-shaped is a common error. Use these concrete tests:
 
-SECTIONAL SIZE — DO NOT GUESS A TIER:
-Do NOT classify a sectional as Small, Medium or Large, and do NOT put a size word
-in "itemName". Report the shape only: "L-shaped sectional sofa", "U-shaped
-sectional sofa". The size variant is chosen downstream from the footprint you
-report in "estimatedDimensions", so spend the effort on measuring that footprint
-rather than on picking a label. Measure the whole footprint including the chaise,
-not just the longest run of seating.
+SHAPE TEST — ask yourself: "Is there seating coming toward me on BOTH the left side AND the right side of the sofa?"
+• If YES (seating wraps around on both sides) → U-SHAPED (horseshoe form)
+• If only ONE side has a return/chaise → L-SHAPED
+
+FORESHORTENING WARNING: A U-shaped sofa photographed from one end or from a corner can look like an L. Look carefully for a THIRD section coming toward the viewer on the opposite side. If you see it, it is U-shaped.
+
+ARM COUNT:
+• An L-shaped sectional has exactly 2 outer arms and 2 distinct seating sections forming a right angle.
+• A U-shaped sectional has 2 outer arms but 3 distinct seating sections forming a U or horseshoe — the two side sections face each other with a connecting back section between them.
+
+AMBIGUITY FALLBACK: If you genuinely cannot determine the shape from the image, output 'sectional sofa' with no shape prefix (do not guess L or U).
+
+SECTIONAL SOFA SIZE CLASSIFICATION (CRITICAL — use visual cues to determine size tier):
+For sectional sofas, you MUST classify as Small, Medium, or Large based on these cues:
+• Count the number of seat cushions visible
+• Check seat depth (standard ~55cm vs deep-seat ~70cm+)
+• Look for a chaise or ottoman section
+• Compare to nearby objects (doors are ~200cm tall, standard doorways ~80cm wide)
+• Count how many separable pieces/sections you can identify
+
+SECTIONAL ITEM NAME — shape only, NO size tier:
+• L-shaped → itemName: "L-shaped sectional sofa"
+• U-shaped → itemName: "U-shaped sectional sofa"
+• Cannot tell shape → itemName: "sectional sofa"
+Do NOT include Small/Medium/Large in the sectional itemName. Size is determined from your dimension estimate downstream.
+
+DIMENSION GUIDANCE FOR SECTIONALS (estimate carefully from the photo):
+L-shaped: compact fits ~230×150cm footprint; standard fills a corner ~270×200cm; large/oversized ~370×220cm
+U-shaped: compact ~280×200cm; standard ~350×250cm; large pit-style ~420×300cm
 
 SOFA BED / SLEEPER DETECTION (CRITICAL — check for these indicators):
 Before classifying any sofa, check for sofa bed / sleeper indicators:
@@ -726,33 +712,23 @@ Before classifying any sofa, check for sofa bed / sleeper indicators:
 • Storage chaise with a lid that lifts up
 • Unusually thick/heavy base panels compared to standard sofas
 
-If ANY sofa bed indicators are detected, set "subcategory": "Sofa Bed" (keep
-"category": "Sofa" — "Sofa Bed" is NOT a valid category) and do not describe it
-as a regular sofa or sectional:
+If ANY sofa bed indicators are detected, classify as "Sofa Bed" NOT as regular "Sofa" or "Sectional":
 
 REGULAR SOFA BED TIERS:
 • TWIN (loveseat sleeper): 2 seat cushions, compact. ~170×90×85cm, 55kg
 • FULL/DOUBLE (3-seat sleeper): 3 seat cushions, standard size. ~200×95×85cm, 75kg
 • QUEEN (large sleeper): 3-4 seat cushions, wider/deeper frame. ~230×100×90cm, 95kg
 
-SECTIONAL SOFA BED:
-Report shape only in "itemName": "L-shaped sectional sofa bed" or "U-shaped
-sectional sofa bed".
-Do NOT include Small/Medium/Large in the name. Size is determined downstream from
-"estimatedDimensions".
-Measure the full footprint including the chaise/storage section.
+SECTIONAL SOFA BED TIERS:
+• SMALL (2-piece L-shaped with sleeper): 3-4 cushions, pull-out + chaise. ~250×170×85cm, 110kg
+• MEDIUM (3-piece L-shaped with sleeper + storage): 4-5 cushions, deep seats, storage chaise. ~290×200×90cm, 145kg
+• LARGE (4+ piece L/U-shaped with sleeper + storage): 6+ cushions, oversized. ~340×220×90cm, 180kg
 
-Include "sofa bed" in the item name (e.g., "L-shaped sectional sofa bed", "Queen sofa bed").
+Include "sofa bed" in the item name (e.g., "Medium sectional sofa bed", "Queen sofa bed").
 
-DIMENSION ESTIMATION — reason from what is in the frame:
-- Use room context clues: door frames (~200cm tall), ceiling height (~240cm),
-  floor tiles (~30cm), windows, and people if present
-- Use brand recognition: if you recognise the model, use its known published
-  dimensions
-- Use proportional reasoning: compare the item to other objects in the frame
-- State in "reasoning" which cues you actually used
-- The reference list below is an anchor for plausibility, not a lookup table: if
-  the photo clearly shows something bigger or smaller, report what you see
+PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
+- Use standard furniture dimensions for the identified type
+- Be consistent: same item type = same dimensions
 
 ${REFERENCE_DIMENSIONS}
 
@@ -785,44 +761,29 @@ If the image shows a scene with many cardboard moving boxes (not a single item):
 SIZING RULE:
 When uncertain between two size estimates, always choose the LARGER option.
 Moving trucks need real-world space. Underestimating causes job failures and driver disputes.
-This applies to size wording in "itemName"; it does not license padding
-"estimatedDimensions" above what the photo supports.
 
 QUANTITY FIELD:
 For sets or counted items, include quantity.
 Example: dining chairs detected = 6
 
-USABILITY CHECK — answer this as well:
-"fullScene" asks one thing only: can you tell what the item actually IS?
-Set "fullScene": true — the default — whenever you can identify a real item.
-That INCLUDES:
-• a wide room-wide shot with many items in it
-• a tight close-up of a single item
-• a full pile, a stack of boxes, a partial view of a large item
-Set "fullScene": false ONLY when the photo is unusable because the item is
-genuinely unidentifiable, i.e. ALL you can honestly say is "I cannot tell what
-this is":
-• too blurred, dark or out of focus to recognise
-• only a tiny fragment / sliver of something, with no identifiable object
-• no household or furniture item present at all
-Framing is NOT a reason to answer false. Being a close-up is NOT a reason to
-answer false. When in any doubt whatsoever, answer true.
+PHOTO USABILITY CHECK:
+Set "fullScene" to false ONLY when the photo is so incomplete that you genuinely cannot identify what the item is — e.g. only a tiny corner/edge of an object with no recognisable shape, or a completely blurred/dark image with no discernible content.
+Do NOT set fullScene: false for:
+- Room-wide shots showing multiple items (count and identify the dominant item)
+- Close-up shots where the item is still clearly recognisable (a sofa arm still shows a sofa)
+- Partial views where the item type is obvious
+Default fullScene to true. Only set it false when you literally cannot identify the item.
 
 Return ONLY valid JSON (no markdown):
 {
-  "itemName": "short furniture type name; shape-only for sectionals (e.g. 'L-shaped sectional sofa', 'sofa', 'dining table')",
+  "itemName": "detailed descriptive name",
   "category": "category from list above",
   "subcategory": "specific subcategory",
-  "brand": "brand/model if visible or recognisable from design (e.g. 'IKEA FRIHETEN'), else null",
-  "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
-  "material": "primary material (e.g. 'fabric', 'leather', 'wood', 'glass')",
-  "style": "style descriptor (e.g. 'modern', 'traditional', 'scandinavian')",
-  "color": "primary color",
   "confidence": 0.0-1.0,
-  "reasoning": "one sentence: which visual cues you used to estimate size (room context, door frame, floor tiles, proportions, brand recognition)",
+  "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
   "estimatedWeight": number in kg,
   "quantity": number (default 1),
-  "fullScene": true   // default true; false ONLY if the item is unidentifiable
+  "fullScene": true
 }`
           },
           {
@@ -832,11 +793,7 @@ Return ONLY valid JSON (no markdown):
         ],
       },
     ],
-    // Enforced server-side, so a preamble or a markdown fence can no longer reach
-    // JSON.parse. Requires the literal word "JSON" in the prompt, which the
-    // "Return ONLY valid JSON" line below supplies — do not remove it.
-    response_format: { type: 'json_object' },
-    max_tokens: 700,  // five extra fields + a sentence of reasoning no longer fit in 500
+    max_tokens: 500,
     temperature: 0,
     seed: 42,
   });
@@ -848,60 +805,20 @@ Return ONLY valid JSON (no markdown):
   }
   
   const result = JSON.parse(content);
-
-  // Accept both key spellings. The prompt asks for *_cm, but a model that follows
-  // the plain English of the field names returns length/width/height; reading only
-  // one spelling would silently drop the estimate and fall back to defaults.
-  const rawDims = result.estimatedDimensions;
-  const dimsNum = (...candidates: unknown[]): number | undefined => {
-    for (const c of candidates) {
-      const n = typeof c === 'string' ? Number(c) : c;
-      if (typeof n === 'number' && Number.isFinite(n) && n > 0) return n;
-    }
-    return undefined;
-  };
-  const lengthCm = rawDims ? dimsNum(rawDims.length_cm, rawDims.length) : undefined;
-  const widthCm  = rawDims ? dimsNum(rawDims.width_cm,  rawDims.width)  : undefined;
-  const heightCm = rawDims ? dimsNum(rawDims.height_cm, rawDims.height) : undefined;
-  const estimatedDimensions =
-    lengthCm !== undefined && widthCm !== undefined && heightCm !== undefined
-      ? { length_cm: lengthCm, width_cm: widthCm, height_cm: heightCm }
-      : undefined;
-
-  // Volume straight from the model's estimate. null — not 0 — when it gave none,
-  // so the matcher's hint stays absent rather than becoming a 0ft3 target.
-  const estimatedVolumeFt3 = estimatedDimensions
-    ? calculateVolumeFt3(estimatedDimensions.length_cm, estimatedDimensions.width_cm, estimatedDimensions.height_cm)
-    : null;
-
-  console.log(
-    `[Vision] ${result.itemName} | brand: ${result.brand ?? 'none'}` +
-    ` | dims: ${JSON.stringify(estimatedDimensions ?? null)}` +
-    ` | vol: ${estimatedVolumeFt3} ft3 | reasoning: ${result.reasoning ?? 'none'}`,
-  );
+  
   console.log('[Vision Engine 2.0] Vision detected:', result.itemName, 
     `(${result.category}/${result.subcategory})`,
     `confidence: ${result.confidence}`);
   
-  const asText = (v: unknown): string | null =>
-    typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
-
   return {
     itemName: result.itemName || 'Unknown Item',
     category: result.category || 'Other',
     subcategory: result.subcategory || 'Unknown',
     confidence: result.confidence || 0.5,
-    estimatedDimensions,
-    estimatedVolumeFt3,
-    brand: asText(result.brand),
-    material: asText(result.material),
-    style: asText(result.style),
-    color: asText(result.color),
-    reasoning: asText(result.reasoning),
+    estimatedDimensions: result.estimatedDimensions,
     estimatedWeight: result.estimatedWeight,
     quantity: typeof result.quantity === 'number' ? result.quantity : undefined,
-    // Fail open: only an explicit false rejects the photo. A model that omits
-    // the field, or an OpenAI outage, must not block every upload.
+    // Only reject when explicitly false — any other value (true, missing) passes
     fullScene: result.fullScene === false ? false : true,
   };
 }
@@ -914,40 +831,13 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
   item?: FurnitureItem;
   similarity: number;
 } {
-  // The model's own estimated dimensions, as a volume, so the matcher can pick
-  // the right size variant when several rows score identically. With sectionals
-  // now reported shape-only, this hint is the ONLY thing that separates the
-  // small/medium/large rows — they tie on name tokens by construction.
-  const hintVolumeFt3 =
-    visionResult.estimatedVolumeFt3 != null && visionResult.estimatedVolumeFt3 > 0
-      ? visionResult.estimatedVolumeFt3
-      : undefined;
-
-  // Use the item name to find best match, with the model's subcategory as a hint
-  const match = findBestMatch(
-    visionResult.itemName,
-    hintVolumeFt3,
-    visionResult.subcategory,
-  );
+  // Use the item name to find best match
+  const match = findBestMatch(visionResult.itemName);
   
   if (match && match.similarity >= SIMILARITY_THRESHOLD) {
     console.log('[Vision Engine 2.0] Database match found:', 
       match.item.name, 
       `(similarity: ${(match.similarity * 100).toFixed(1)}%)`);
-    // A match replaces the model's dimensions outright, so a wildly different
-    // volume means we are about to quote a different object than the one in the
-    // photo. Log it rather than silently overwriting a good measurement.
-    if (hintVolumeFt3 !== undefined && hintVolumeFt3 > 0) {
-      const ratio = match.item.volume_ft3 / hintVolumeFt3;
-      if (ratio > 2 || ratio < 0.5) {
-        console.warn(
-          '[Vision Engine 2.0] Match volume implausible vs vision estimate:',
-          `"${visionResult.itemName}" estimated ${hintVolumeFt3.toFixed(1)}ft3`,
-          `-> matched "${match.item.name}" at ${match.item.volume_ft3}ft3`,
-          `(${ratio.toFixed(2)}x)`,
-        );
-      }
-    }
     return {
       matched: true,
       item: match.item,
@@ -1026,16 +916,18 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     
     // STEP 2: Detect item using Vision API
     const visionResult = await detectItemWithVision(imageBase64);
-
-    // STEP 2.1: Reject unusable photos BEFORE either cache is written. Caching a
-    // rejection would pin the photo to a permanent failure, so the customer's
-    // replacement of the same URL could never be re-analysed.
-    if (visionResult.fullScene === false) {
-      console.warn('[Vision Engine 2.0] Photo rejected as unidentifiable:', photoUrl.slice(-40));
-      throw Object.assign(new Error('FULL_SCENE_REJECTED'), { code: 'FULL_SCENE_REJECTED' });
-    }
     
-    // STEP 2.5: Apply category correction (fix AI misclassifications)
+    // STEP 2.5a: Full-scene guard — reject only when the item is unidentifiable
+    if (visionResult.fullScene === false) {
+      console.log('[Vision Engine 2.0] fullScene: false — photo rejected (item unidentifiable)');
+      // Do NOT cache this result so a retry with a better photo is possible
+      throw Object.assign(
+        new Error('FULL_SCENE_REJECTED'),
+        { code: 'FULL_SCENE_REJECTED' }
+      );
+    }
+
+    // STEP 2.5b: Apply category correction (fix AI misclassifications)
     const categoryCorrection = correctCategory(visionResult.itemName, visionResult.category);
     if (categoryCorrection.wasCorrected) {
       visionResult.category = categoryCorrection.category;
@@ -1081,8 +973,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,  // Keep original name with quantity
         category: item.category,
         subcategory: item.subcategory,
-        // Always true here: an unusable photo already threw at STEP 2.1.
-        fullSceneConfirmed: true,
         quantity,
         dimensions: {
           length_cm: item.dimensions_cm.length,  // Per-item dimensions
@@ -1174,23 +1064,8 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         insurance = 'medium';
       }
       
-      // Fragile/electronics get higher insurance.
-      //
-      // The 'Fragile' arm this replaces was dead: 'Fragile' is not in
-      // FurnitureCategory nor in the prompt's category list, so the model can
-      // never return it (it exists only in the legacy OUTPUT enum). There is no
-      // matched row to read handling_complexity from on this path either — this
-      // is the no-match branch, and handling_complexity has no 'fragile' or
-      // 'extreme' member in any case. Fragility is therefore inferred from the
-      // item name, which is the only fragility signal this path actually has.
-      const FRAGILE_NAME_HINTS = [
-        'glass', 'mirror', 'piano', 'tv', 'television', 'monitor', 'screen',
-        'china', 'artwork', 'painting', 'aquarium', 'chandelier', 'marble',
-      ];
-      const nameIsFragile = FRAGILE_NAME_HINTS.some(h =>
-        visionResult.itemName.toLowerCase().includes(h),
-      );
-      if (visionResult.category === 'Electronics' || nameIsFragile) {
+      // Fragile/electronics get higher insurance
+      if (visionResult.category === 'Electronics' || visionResult.category === 'Fragile') {
         insurance = insurance === 'standard' ? 'medium' : insurance;
       }
       
@@ -1212,8 +1087,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,
         category: visionResult.category,
         subcategory: visionResult.subcategory,
-        // Always true here: an unusable photo already threw at STEP 2.1.
-        fullSceneConfirmed: true,
         quantity,
         dimensions: {
           length_cm: corrected.length_cm,  // Per-item dimensions
@@ -1257,11 +1130,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     return result;
     
   } catch (error: any) {
-    // A rejected photo is a real, actionable outcome — not an engine failure.
-    // It must propagate so the caller can ask for a replacement, instead of
-    // being absorbed into the generic 'Unidentified Item' fallback below.
-    if (error?.code === 'FULL_SCENE_REJECTED') throw error;
-
     logEvent.error('vision_engine', error, { photoUrl });
     
     // Return fallback result
@@ -1271,8 +1139,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       itemName: 'Unidentified Item',
       category: 'Other',
       subcategory: 'Unknown',
-      // The framing was never assessed, so this must not reject the upload.
-      fullSceneConfirmed: true,
       quantity: 1,
       dimensions: {
         length_cm: fallbackDims.length_cm,
@@ -1316,7 +1182,6 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
   insuranceLevel: 'standard' | 'medium' | 'high' | 'premium';
   confidence: number;
   sourceMetadata: string;
-  fullSceneConfirmed: boolean;
 } {
   // Map category to legacy format
   let legacyCategory: 'Furniture' | 'Appliance' | 'Fragile' | 'Oversized' | 'Bulky' | 'Electronics' | 'Other' = 'Other';
@@ -1358,9 +1223,6 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
     recommendedMovers: v2Result.movers_required,
     insuranceLevel: v2Result.insurance_level,
     confidence: v2Result.confidence,
-    // Not persisted as a column: a rejected photo never becomes an item row, so
-    // this only has to survive as far as the HTTP response.
-    fullSceneConfirmed: v2Result.fullSceneConfirmed !== false,
     sourceMetadata: JSON.stringify({
       visionEngine: '2.0',
       source: v2Result.source,

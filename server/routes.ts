@@ -83,11 +83,9 @@ import {
   vehicleClassFromVehicleType,
   vehicleTypeFromClass,
   getVehicleClassFromVolume,
-  getVehicleClassFromVolumeAndLength,
   sumHandlingPremiums,
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
-
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
@@ -133,51 +131,6 @@ function formatPhoneNumber(phone: string): string {
 
 // Helper to mask full address for privacy - only show city/area
 // Strips street numbers/addresses but keeps city and province
-/**
- * Price bracket for a lead whose volume has not been measured yet.
- *
- * Goes through the SAME calculatePriceRange the quote card uses, so the figure
- * in Alex's email and the figure on the card come from one implementation
- * instead of two that drift. It previously called calculatePrice twice here
- * with its own boxes/apartment ends.
- *
- * Access fees are passed through when the caller has them and are the one
- * remaining reason the two brackets can differ: the card knows the access types
- * (step 2 collects them) and adds e.g. +$12 for stairs at BOTH ends, whereas
- * /api/leads/capture is not currently sent them. Every other input matches.
- * Item premiums need the photos and so are in neither — this brackets the load,
- * not the invoice, and the copy rendering it stays provisional.
- */
-const LEAD_ESTIMATE_BRACKET_FALLBACK = '$50–$350';
-
-async function estimateBracketForLead(opts: {
-  distanceKm: string | null | undefined;
-  numberOfMovers: number | undefined;
-  pickupDifficulty?: string | null;
-  dropoffDifficulty?: string | null;
-}): Promise<string> {
-  const distanceKm = parseFloat(String(opts.distanceKm ?? ''));
-  if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
-    return LEAD_ESTIMATE_BRACKET_FALLBACK;
-  }
-  try {
-    const { calculatePriceRange } = await import("@shared/pricing");
-    // volumeCuft omitted on purpose: that is what makes calculatePriceRange
-    // bracket the load-size tiers end to end rather than return a single price.
-    const { min, max, isRange } = calculatePriceRange({
-      distanceKm,
-      numberOfMovers: opts.numberOfMovers === 2 ? 2 : 1,
-      pickupDifficulty: opts.pickupDifficulty ?? null,
-      dropoffDifficulty: opts.dropoffDifficulty ?? null,
-    });
-    if (!isRange) return LEAD_ESTIMATE_BRACKET_FALLBACK;
-    return `$${Math.floor(min.total)}–$${Math.ceil(max.total)}`;
-  } catch (err) {
-    logger.warn({ err, distanceKm: opts.distanceKm }, 'estimateBracketForLead: falling back to static bracket');
-    return LEAD_ESTIMATE_BRACKET_FALLBACK;
-  }
-}
-
 function maskAddressForPrivacy(location: string | null): string {
   if (!location) return "Calgary, AB";
   
@@ -4437,41 +4390,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // ── Idempotency ──────────────────────────────────────────────────────
-      // Header-only, never a body field: whoever picks the key picks which row
-      // comes back, so it must not be attacker-chosen alongside a forged
-      // customerId. Scoped to the authenticated user either way.
-      //
-      // Only an UNPAID booking is replayed. That scope is what lets one key live
-      // for the whole tab session: a repeat submit before payment is the
-      // double-submit we are collapsing, while a submit after the first booking
-      // was paid is a genuinely new move and must get its own row.
-      const idempotencyKey = typeof req.headers['x-idempotency-key'] === 'string'
-        ? req.headers['x-idempotency-key'].trim().slice(0, 200)
-        : null;
-      if (idempotencyKey) {
-        const [existing] = await db
-          .select()
-          .from(bookings)
-          .where(and(
-            eq(bookings.customerId, user.id),
-            eq(bookings.idempotencyKey, idempotencyKey),
-          ))
-          .limit(1);
-        if (existing && existing.paymentStatus !== 'succeeded') {
-          logEvent.booking('idempotent_replay', {
-            bookingId: existing.id,
-            customerId: user.id,
-            paymentStatus: existing.paymentStatus,
-          });
-          return res.json({
-            ...existing,
-            idempotentReplay: true,
-            message: "Booking already created. Please complete payment to find movers.",
-          });
-        }
-      }
-
       // Validate booking data - customerId will be added from authenticated user
       const bookingData = validateBody(
         insertBookingSchema.extend({
@@ -4586,25 +4504,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // calculatePrice falls back to the loadSize estimate instead of pricing a
       // zero-volume move.
       const aiDetectedVolumeCuft = summedVolumeCuft > 0 ? summedVolumeCuft : undefined;
-      // Longest side across the load. Floors Class A -> B for a long-but-light
-      // item (mattress, large TV) that no SUV can carry. Derived here, like the
-      // volume, so the client cannot post a dimension that lowers the class.
-      const maxLengthCm = detectedItems.reduce(
-        (max: number, it: { dimensionsLcm: number; dimensionsWcm: number; dimensionsHcm: number }) =>
-          Math.max(max, it.dimensionsLcm, it.dimensionsWcm, it.dimensionsHcm),
-        0,
-      );
-      // Canonical mapping, not a second copy of the thresholds: raw <=40 ->
-      // car, <=140 -> pickup, <=350 -> van, else truck.
+      // Canonical mapping, not a second copy of the thresholds: raw <=54 -> car,
+      // <=136 -> pickup, <=318 -> van, else truck.
       const derivedRecommendedVehicle = aiDetectedVolumeCuft !== undefined
-        ? vehicleTypeFromClass(
-            getVehicleClassFromVolumeAndLength(aiDetectedVolumeCuft, maxLengthCm),
-          )
+        ? vehicleTypeFromClass(getVehicleClassFromVolume(aiDetectedVolumeCuft))
         : undefined;
       const heavyItemFeeOverride = detectedItems.length > 0
         ? sumHandlingPremiums(detectedItems)
         : undefined;
-
 
       // Hand-corrected lines move the price, so record that they happened. The
       // figures themselves still originate on the client either way — this is
@@ -4641,7 +4548,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         heavyItem: bookingData.heavyItem || false,
         numberOfMovers: bookingData.numberOfMovers,
         volumeCuft: aiDetectedVolumeCuft,
-        maxLengthCm,
         detectedItems,
         // Legacy fallback only when the vision engine emitted no keyed premiums.
         heavyItemFeeOverride: hasKeyedPremiums ? undefined : heavyItemFeeOverride,
@@ -4716,7 +4622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create booking with geocoded data, price breakdown, and AI metadata
       // SECURITY: Use authenticated user's ID, not from request body
       // If preSelectedMoverId is provided, store it for direct assignment after payment
-      const createBookingRow = () => storage.createBooking({
+      const booking = await storage.createBooking({
         customerId: user.id,
         pickupAddress: bookingData.pickupAddress,
         dropoffAddress: bookingData.dropoffAddress,
@@ -4736,10 +4642,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Persist the measured volume, not just the loadSize bucket it was
         // rounded into: dispatch reads it back to pick the vehicle class.
         ...(aiDetectedVolumeCuft !== undefined && { aiDetectedVolumeCuft: toDecimalString(aiDetectedVolumeCuft) }),
-        // Derived above from the item dimensions, never off the request body.
-        // The confirmation email re-prices against this to decide whether the
-        // photos moved the price; without it that check misses the length floor.
-        ...(maxLengthCm > 0 && { aiMaxLengthCm: toDecimalString(maxLengthCm) }),
         // Provenance for the coordinates written just below. Without it a
         // mock-geocoded booking looks identical to a real one, and anything
         // measuring against these points (the arrival geofence, the ETA) quietly
@@ -4767,54 +4669,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         discountReason: discountReason,
         moverBalanceOwed: toDecimalString(moverBalanceOwed),
         notifiedAt: new Date(),
-        ...(idempotencyKey && { idempotencyKey }),
         ...(utmSource && { utmSource }),
         ...(utmMedium && { utmMedium }),
         ...(utmCampaign && { utmCampaign }),
         ...(sourceChannel && { sourceChannel }),
         ...(landingPage && { landingPage }),
       } as any);
-
-      // The pre-flight lookup above closes the common case (a second submit
-      // after the first finished). Two truly concurrent submits both pass it, so
-      // the partial unique index is the real guard — the loser lands here and is
-      // handed the winner's row rather than a 400.
-      let booking: Awaited<ReturnType<typeof createBookingRow>>;
-      try {
-        booking = await createBookingRow();
-      } catch (insertErr) {
-        // Drizzle re-throws the driver error, but a wrapper would keep the
-        // original on `cause` — check both, and match on `constraint` (set by
-        // node-postgres) before falling back to the message text.
-        const pgErr = (insertErr as { code?: string; constraint?: string; cause?: unknown })?.code
-          ? (insertErr as { code?: string; constraint?: string })
-          : ((insertErr as { cause?: { code?: string; constraint?: string } })?.cause ?? {});
-        const isDuplicateKey =
-          !!idempotencyKey &&
-          String(pgErr.code ?? '') === '23505' &&
-          (pgErr.constraint === 'bookings_customer_idempotency_key_unique' ||
-            String((insertErr as Error)?.message ?? '').includes('bookings_customer_idempotency_key_unique'));
-        if (!isDuplicateKey) throw insertErr;
-        const [raced] = await db
-          .select()
-          .from(bookings)
-          .where(and(
-            eq(bookings.customerId, user.id),
-            eq(bookings.idempotencyKey, idempotencyKey),
-          ))
-          .limit(1);
-        if (!raced) throw insertErr;
-        logEvent.booking('idempotent_insert_race', {
-          bookingId: raced.id,
-          customerId: user.id,
-        });
-        return res.json({
-          ...raced,
-          idempotentReplay: true,
-          message: "Booking already created. Please complete payment to find movers.",
-        });
-      }
-
+      
       // Increment promo usage count if promo applied
       if (promoCode && discountAmount > 0) {
         await storage.updateUser(user.id, { 
@@ -5580,6 +5441,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You are not assigned to this booking" });
       }
 
+      // Only allowed before the trip has started (confirmed status only)
+      if (booking.status !== "confirmed") {
+        return res.status(400).json({ error: "You can only cancel before the trip has started" });
+      }
+
       logEvent.booking('mover_cancelled_confirmed_job', { bookingId, moverId: mover.id, reason });
 
       // Detach the mover and reset to pending so it can be re-dispatched
@@ -5736,11 +5602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cancellationAnswers: z.record(z.any()).optional(),
       });
       let updates = validateBody(updateSchema, req.body);
-
-      // Set only on a customer cancellation, and read after the booking row is
-      // actually written — Alex's win-back must not fire on a cancel that failed.
-      let cancelSurvey: { reason: string | null; comments: string | null } | null = null;
-
+      
       // If moverId is being set (direct job acceptance), verify authorization
       if (updates.moverId) {
         if (!requireUser(req, res)) return;
@@ -5858,14 +5720,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Exit survey. The column is text, so the answers object is stored
           // as JSON. Kept out of the update on any other transition.
-          // Captured as an object first: the Alex trigger below needs the free-text
-          // comment, and by the next line `updates.cancellationAnswers` is a string.
-          cancelSurvey = {
-            reason: updates.cancellationReason ?? null,
-            comments: typeof updates.cancellationAnswers?.comments === 'string'
-              ? updates.cancellationAnswers.comments
-              : null,
-          };
           if (updates.cancellationAnswers !== undefined) {
             (updates as any).cancellationAnswers = JSON.stringify(updates.cancellationAnswers);
           }
@@ -6044,29 +5898,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updatedAt: new Date().toISOString(),
           });
         } catch (_) {}
-      }
-
-      // Alex's post-cancellation win-back: reason-aware email now, SMS 48h out.
-      // Deliberately NOT awaited. It sends an email and enqueues a delayed BullMQ
-      // job, and `queue.add` does not time out against an unreachable Redis — a
-      // customer's cancel confirmation must never wait on either.
-      if (cancelSurvey && booking.status === BOOKING_STATUSES.CANCELLED) {
-        void (async () => {
-          try {
-            const { alex } = await import('./agents/alex');
-            await alex.run('cancellation_recovery', {
-              bookingId: booking.id,
-              cancellationReason: cancelSurvey.reason,
-              cancellationComments: cancelSurvey.comments,
-            });
-          } catch (alexErr) {
-            logEvent.error(
-              'cancellation_recovery_trigger_failed',
-              alexErr instanceof Error ? alexErr : new Error('alex error'),
-              { bookingId: booking.id },
-            );
-          }
-        })();
       }
 
       res.json(booking);
@@ -8818,19 +8649,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // AI photo analysis endpoint with free mock fallback
-  // DISABLED: unauthenticated, no rate limit, thresholds disagree with VEHICLE_VOLUME_THRESHOLDS
-  //
-  // Its only UI caller is itself commented out (RequestMove.tsx, ARCHIVED block),
-  // and the prompt below hardcodes load-size bands (boxes 1-10 / medium 11-50 /
-  // large 50-170 / apartment 170+) that contradict VEHICLE_VOLUME_THRESHOLDS
-  // (40 / 140 / 350). It also bypasses FURNITURE_DATABASE entirely. Original
-  // handler retained below, commented, for reference.
-  app.post("/api/ai/analyze-photo", upload.single('photo'), async (_req: Request, res: Response) => {
-    res.status(410).json({ error: 'This endpoint is deprecated. Use /api/ai/items/identify.' });
-    return;
-  });
-
-  /* ORIGINAL HANDLER (disabled, see above)
   app.post("/api/ai/analyze-photo", upload.single('photo'), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
@@ -9028,7 +8846,6 @@ Respond with VALID JSON only:
       res.status(500).json({ error: error instanceof Error ? error.message : "Analysis failed" });
     }
   });
-  */
 
   // Geocoding distance endpoint for AI auto-quote predictor
   app.post("/api/geocode/distance", async (req: Request, res: Response) => {
@@ -11573,15 +11390,12 @@ Respond with VALID JSON only:
               confidence: result.confidence.toString() as any,
               sourceMetadata: result.sourceMetadata,
             });
-            items.push({ ...identifiedItem, fullSceneConfirmed: result.fullSceneConfirmed });
+            items.push(identifiedItem);
           } else {
             items.push({
               id: `temp-${index}`,
               photoUrl,
               processingStatus: 'completed',
-              // Close-up / partial shot. Surfaced so the quote flow can reject
-              // the photo instead of pricing a fragment of a room.
-              fullSceneConfirmed: result.fullSceneConfirmed,
               itemName: result.itemName,
               category: result.category,
               weightKg: result.weightKg.toString(),
@@ -11602,30 +11416,29 @@ Respond with VALID JSON only:
         } else {
           const error = settled.reason;
           const photoUrl = photoUrls[results.indexOf(settled)];
-          console.error(`[Vision Engine 2.0] Error processing photo ${photoUrl?.substring(0, 80)}:`, error?.message || error);
-          if (error?.stack) console.error(`[Vision Engine 2.0] Stack:`, error.stack);
-          
-          // A FULL_SCENE_REJECTED photo is not an engine failure: the image is
-          // unusable (blurred / unidentifiable) and the fix is a replacement
-          // photo, so flag it for the client instead of reporting a crash.
-          const needsReplacement = error?.code === 'FULL_SCENE_REJECTED'
-            || error?.message === 'FULL_SCENE_REJECTED';
-          const errorMessage = needsReplacement
-            ? "We couldn't tell what's in this photo. Please replace it with a clearer one."
-            : (error?.message || 'Unknown error');
+          const isFullSceneRejection = error?.message === 'FULL_SCENE_REJECTED' || error?.code === 'FULL_SCENE_REJECTED';
+
+          if (!isFullSceneRejection) {
+            console.error(`[Vision Engine 2.0] Error processing photo ${photoUrl?.substring(0, 80)}:`, error?.message || error);
+            if (error?.stack) console.error(`[Vision Engine 2.0] Stack:`, error.stack);
+          } else {
+            console.log(`[Vision Engine 2.0] Photo rejected (item unidentifiable): ${photoUrl?.substring(0, 80)}`);
+          }
 
           items.push({
             id: `temp-${results.indexOf(settled)}`,
             photoUrl,
             processingStatus: 'failed',
-            needsReplacement,
-            errorMessage,
+            errorMessage: isFullSceneRejection
+              ? 'Please upload a clear photo showing the full item so we can identify it.'
+              : (error?.message || 'Unknown error'),
+            needsReplacement: isFullSceneRejection,
           });
-          
+
           errors.push({
             photoUrl,
-            needsReplacement,
-            error: errorMessage,
+            error: error?.message || 'Unknown error',
+            needsReplacement: isFullSceneRejection,
           });
         }
       }
@@ -16768,15 +16581,6 @@ Respond with VALID JSON only:
             numberOfMovers?: number;
             pickupAddress?: string | null;
             dropoffAddress?: string | null;
-            // Optional provenance for totalPrice, mirroring PriceBreakdown.volumeSource.
-            // Absent from older clients, hence the items-based fallback below.
-            volumeSource?: string | null;
-            // Access types, so the bracket here matches the one on the quote
-            // card. The card has had these since step 2; the capture payload
-            // does not send them yet, and until it does the two brackets differ
-            // by exactly the access fee.
-            pickupDifficulty?: string | null;
-            dropoffDifficulty?: string | null;
           }
         : null;
       const quoteId = typeof body.quoteId === 'string' && body.quoteId ? body.quoteId : null;
@@ -16790,27 +16594,7 @@ Respond with VALID JSON only:
       if (notes) notesLines.push(notes);
       if (quoteContext?.pickupAddress) notesLines.push(`Pickup: ${quoteContext.pickupAddress}`);
       if (quoteContext?.dropoffAddress) notesLines.push(`Dropoff: ${quoteContext.dropoffAddress}`);
-      // A price computed before the photos is the load-size bucket's price, not
-      // the move's. Written as a single figure it became "your quote of $124.79"
-      // in Alex's outreach, and the real booking landed at $54.68. Only a
-      // vision-measured price is recorded as a firm number; anything else is
-      // recorded as a bracket, and alex.ts words the email off that distinction.
-      const priceIsVisionConfirmed = quoteContext?.volumeSource
-        ? quoteContext.volumeSource === 'detected'
-        // No provenance sent: items present means the vision engine ran, which is
-        // the only condition under which totalPrice used a measured volume.
-        : !!quoteContext?.items;
-      if (quoteContext?.totalPrice && priceIsVisionConfirmed) {
-        notesLines.push(`Quote: ${quoteContext.totalPrice} (confirmed by photo analysis)`);
-      } else if (quoteContext?.totalPrice) {
-        const bracket = await estimateBracketForLead({
-          distanceKm: quoteContext?.distanceKm,
-          numberOfMovers: quoteContext?.numberOfMovers,
-          pickupDifficulty: quoteContext?.pickupDifficulty,
-          dropoffDifficulty: quoteContext?.dropoffDifficulty,
-        });
-        notesLines.push(`Quote: Est. ${bracket} depending on load (photos not yet reviewed)`);
-      }
+      if (quoteContext?.totalPrice) notesLines.push(`Quote: ${quoteContext.totalPrice}`);
       if (quoteContext?.items) notesLines.push(`Items: ${quoteContext.items}`);
       if (quoteContext?.vehicleLabel) notesLines.push(`Vehicle: ${quoteContext.vehicleLabel}`);
       if (quoteContext?.distanceKm) notesLines.push(`Distance: ${quoteContext.distanceKm}km`);
@@ -17175,22 +16959,6 @@ Respond with VALID JSON only:
         const result = await alex.run(
           'recover_abandoned',
           bookingId ? { bookingId: String(bookingId) } : {},
-          { dryRun },
-        );
-        return res.json({ ok: true, action, dryRun, result });
-      }
-      if (action === 'cancellation_recovery' || action === 'cancellation_recovery_sms') {
-        const bookingId = req.body?.bookingId ?? req.body?.input?.bookingId;
-        if (!bookingId) return res.status(400).json({ error: 'bookingId required' });
-        // Reason/comments are optional overrides for previewing a specific branch
-        // of the template; the live trigger passes the real exit-survey answers.
-        const result = await alex.run(
-          action,
-          {
-            bookingId: String(bookingId),
-            cancellationReason: req.body?.cancellationReason ?? req.body?.input?.cancellationReason ?? null,
-            cancellationComments: req.body?.cancellationComments ?? req.body?.input?.cancellationComments ?? null,
-          },
           { dryRun },
         );
         return res.json({ ok: true, action, dryRun, result });
