@@ -268,7 +268,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Large L-shaped sectional sofa (4-5 piece, deep-seat, oversized)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise', 'large', 'oversized', 'deep', '4-piece', '5-piece', 'modular', 'wide', 'deep-seat'],
+    keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise', 'large', 'oversized', 'deep', '4-piece', '5-piece', 'modular', 'wide', 'deep-seat', 'nesting'],
     dimensions_cm: { length: 370, width: 220, height: 90 },
     volume_ft3: calcVolume(370, 220, 90),
     weight_kg: 170,
@@ -283,7 +283,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Small U-shaped sectional sofa (compact, 3-piece)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'small', 'compact', '3-piece', 'u-shape'],
+    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'small', 'compact', '3-piece', 'u-shape', 'nesting'],
     dimensions_cm: { length: 280, width: 200, height: 85 },
     volume_ft3: calcVolume(280, 200, 85),
     weight_kg: 130,
@@ -298,7 +298,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Medium U-shaped sectional sofa (standard, 4-5 piece)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'medium', 'standard', '4-piece', '5-piece', 'u-shape'],
+    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'medium', 'standard', '4-piece', '5-piece', 'u-shape', 'nesting'],
     dimensions_cm: { length: 350, width: 250, height: 85 },
     volume_ft3: calcVolume(350, 250, 85),
     weight_kg: 180,
@@ -313,7 +313,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Large U-shaped sectional sofa (oversized, 6+ piece)',
     category: 'Sofa',
     subcategory: 'Sectional',
-    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'large', 'oversized', '6-piece', 'theater', 'pit', 'u-shape', 'deep-seat'],
+    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'large', 'oversized', '6-piece', 'theater', 'pit', 'u-shape', 'deep-seat', 'nesting'],
     dimensions_cm: { length: 420, width: 300, height: 90 },
     volume_ft3: calcVolume(420, 300, 90),
     weight_kg: 240,
@@ -403,7 +403,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     name: 'Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage)',
     category: 'Sofa',
     subcategory: 'Sofa Bed',
-    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'large', 'oversized', '4-piece', '5-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy', 'modular'],
+    keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'large', 'oversized', '4-piece', '5-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy', 'modular', 'nesting'],
     dimensions_cm: { length: 340, width: 220, height: 90 },
     volume_ft3: calcVolume(340, 220, 90),
     weight_kg: 180,
@@ -444,7 +444,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     // loveseat's 38.27ft3 outright and discarded the vision model's own
     // estimate. A round cuddler is roughly 2.5x that, so the load was quoted
     // an SUV for a pickup job.
-    keywords: ['cuddle', 'snuggler', 'cuddler', 'round', 'circular', 'curved', 'sofa', 'couch', 'oversized', 'deep-seat'],
+    // 'nest' lives here and 'nesting' on the modular sectionals below. A plain
+    // "nest sofa" is this deep, enveloping shape; "nesting" means pieces that
+    // tuck into each other, which is a modular sectional. Keeping them on
+    // separate rows makes each resolve on an exact match (+3) while the other
+    // only partials (+1), so neither term is decided by array order.
+    keywords: ['cuddle', 'snuggler', 'cuddler', 'nest', 'round', 'circular', 'curved', 'sofa', 'couch', 'oversized', 'deep-seat'],
     // Bounding box, like every row here: a circular seat does not fill its
     // square, but what has to fit in the vehicle is the box, not the cushion.
     dimensions_cm: { length: 180, width: 180, height: 85 },
