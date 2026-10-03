@@ -419,7 +419,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'large', 'oversized', '4-piece', '5-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy', 'modular', 'nesting'],
     dimensions_cm: { length: 340, width: 220, height: 90 },
     volume_ft3: calcVolume(340, 220, 90),
-    pieceCount: 4,
+    pieceCount: 3,
     weight_kg: 180,
     load_size: 'large',
     vehicle: 'van',
