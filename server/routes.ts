@@ -4734,6 +4734,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Persist the measured volume, not just the loadSize bucket it was
         // rounded into: dispatch reads it back to pick the vehicle class.
         ...(aiDetectedVolumeCuft !== undefined && { aiDetectedVolumeCuft: toDecimalString(aiDetectedVolumeCuft) }),
+        // Derived above from the item dimensions, never off the request body.
+        // The confirmation email re-prices against this to decide whether the
+        // photos moved the price; without it that check misses the length floor.
+        ...(maxLengthCm > 0 && { aiMaxLengthCm: toDecimalString(maxLengthCm) }),
         // Provenance for the coordinates written just below. Without it a
         // mock-geocoded booking looks identical to a real one, and anything
         // measuring against these points (the arrival geofence, the ETA) quietly

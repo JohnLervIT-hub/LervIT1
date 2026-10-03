@@ -151,7 +151,16 @@ function photosMovedThePrice(booking: Partial<Booking>): boolean {
     };
     const estimate = calculatePrice(inputs).total;
     if (estimate <= 0) return false;
-    const measured = calculatePrice({ ...inputs, volumeCuft: detectedVolume }).total;
+    // maxLengthCm only ever raises the class, so it belongs on the measured
+    // side alone: the estimate is the pre-photo price, computed when no item
+    // dimensions were known. Without it `measured` sits a class below what the
+    // booking actually charged for a long-item load, understating the drift and
+    // silently suppressing the note.
+    const measured = calculatePrice({
+      ...inputs,
+      volumeCuft: detectedVolume,
+      maxLengthCm: num(booking.aiMaxLengthCm),
+    }).total;
     return Math.abs(measured - estimate) / estimate > PRICE_DRIFT_TOLERANCE;
   } catch {
     return false;

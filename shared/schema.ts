@@ -195,6 +195,14 @@ export const bookings = pgTable("bookings", {
   // prefers this over the loadSize bucket when filtering movers by vehicle class.
   // Like every numeric column here it reads back as a string — parse at the call site.
   aiDetectedVolumeCuft: numeric("ai_detected_volume_cuft"),
+  // Longest side across the load's items, in cm. Persisted alongside the volume
+  // because the item rows themselves are not: the pre-booking vision pass runs
+  // without a bookingId, so nothing downstream can recover the dimensions. The
+  // confirmation email's drift check and dispatch both need the same vehicle
+  // class the price was charged at, and the length floor (shared/pricing.ts)
+  // is what separates a 203cm mattress from an SUV load.
+  // Reads back as a string like every numeric column here — parse at the call site.
+  aiMaxLengthCm: numeric("ai_max_length_cm"),
   detectedItems: text("detected_items"),
   
   paymentStatus: text("payment_status").default("pending"),
@@ -390,6 +398,10 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   // off the request body and writes it as a decimal string. Leaving it in the
   // schema would reject the number the client actually sends.
   aiDetectedVolumeCuft: true,
+  // Server-derived from the item dimensions, same as aiDetectedVolumeCuft above.
+  // Leaving it in would both reject the request and make a price input that
+  // raises the vehicle class customer-settable.
+  aiMaxLengthCm: true,
   // Same: the client sends an array of { itemName, premiumKey } and the route
   // reads it straight off req.body to sum keyed item premiums. The column is
   // text, so validating the request against it rejected every booking that
