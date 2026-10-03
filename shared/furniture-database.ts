@@ -2138,23 +2138,21 @@ export function findBestMatch(
  * Single source of truth for volume-to-vehicle mapping
  * 
  * Raw ft³ boundaries, matching VEHICLE_CLASS_MAX_RAW_FT3 in shared/pricing.ts
- * exactly. They were previously rounded to 36/127/318, which disagreed with the
- * classifier in the fractional window either side of each boundary — a 36.2 ft³
- * load classed as A for pricing but 'medium' for load size.
+ * exactly.
  *
  * Not imported from pricing.ts because shared/pricing.ts imports from this file;
  * taking the dependency the other way would make the cycle. Any change to
  * VEHICLE_CLASS_MAX_RAW_FT3 has to be mirrored here.
- *   ≤36.36 ft³   → SUV (car)                 - Single chair, few boxes  [Class A]
- *   ≤127.27 ft³  → Pickup Truck (pickup)     - Medium furniture         [Class B]
- *   ≤318.18 ft³  → Cargo Van (van)           - Bedroom sets, apartments [Class C]
- *   >318.18 ft³  → Moving Truck (truck)      - Full apartment           [Class E]
+ *   ≤40 ft³    → SUV (car)                 - Single chair, few boxes  [Class A]
+ *   ≤140 ft³   → Pickup Truck (pickup)     - Medium furniture         [Class B]
+ *   ≤350 ft³   → Cargo Van (van)           - Bedroom sets, apartments [Class C]
+ *   >350 ft³   → Moving Truck (truck)      - Full apartment           [Class E]
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
-  CAR_MAX: 36.36,     // raw ≤ 36.36 ft³   → Class A (SUV)
-  PICKUP_MAX: 127.27, // raw ≤ 127.27 ft³  → Class B (Pickup Truck)
-  VAN_MAX: 318.18,    // raw ≤ 318.18 ft³  → Class C (Cargo Van)
-  // Above 318.18 ft³ → Class E (Moving Truck)
+  CAR_MAX: 40,      // raw ≤ 40 ft³   → Class A (SUV)
+  PICKUP_MAX: 140,  // raw ≤ 140 ft³  → Class B (Pickup Truck)
+  VAN_MAX: 350,     // raw ≤ 350 ft³  → Class C (Cargo Van)
+  // Above 350 ft³ → Class E (Moving Truck)
 };
 
 /**

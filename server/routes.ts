@@ -4593,9 +4593,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           Math.max(max, it.dimensionsLcm, it.dimensionsWcm, it.dimensionsHcm),
         0,
       );
-      // Canonical mapping, not a second copy of the thresholds: raw <=36.36 ->
-      // car, <=127.27 -> pickup, <=318.18 -> van, else truck. (The previous
-      // comment here read 54/136/318 — two of three numbers stale.)
+      // Canonical mapping, not a second copy of the thresholds: raw <=40 ->
+      // car, <=140 -> pickup, <=350 -> van, else truck.
       const derivedRecommendedVehicle = aiDetectedVolumeCuft !== undefined
         ? vehicleTypeFromClass(
             getVehicleClassFromVolumeAndLength(aiDetectedVolumeCuft, maxLengthCm),

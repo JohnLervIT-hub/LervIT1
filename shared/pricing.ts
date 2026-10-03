@@ -165,21 +165,24 @@ export const LOAD_SIZE_CEILING_TIER = 'apartment';
 /**
  * Class boundaries in RAW ft³ — the same unit the Recommendations card shows.
  *
- * These were previously expressed as 40 / 140 / 350 in "adjusted" ft³, with a
- * packingFactor of 1.10 applied inside the classifier. The arithmetic was
- * correct and these are its exact equivalents (40/1.10, 140/1.10, 350/1.10), but
- * splitting one calibration across a multiply and a threshold meant the card
- * displayed a raw volume beside a published range quoted in adjusted ft³ — so a
- * 127.6 ft³ load read as a Pickup ("41-140") while classing as a Cargo Van.
+ * Published ranges: SUV 0-40, Pickup 41-140, Cargo Van 141-350, Truck 351+.
  *
- * Everything user-facing now compares in the same unit. VEHICLE_CLASSES and
- * VEHICLE_CAPACITY_RANGES derive from this object rather than restating it,
- * which is how the three sets drifted apart before.
+ * History, because the numbers look unchanged but the behaviour is not: these
+ * were once 40/140/350 in "adjusted" ft³, with a packingFactor of 1.10 applied
+ * inside the classifier, which put the real raw cutoffs at 36.36/127.27/318.18.
+ * The card showed raw volume beside a range quoted in adjusted ft³, so a 127.6
+ * ft³ load read as a Pickup while classing as a Cargo Van. The factor is gone
+ * and these are now raw, which also widens every class by ~10%: a load between
+ * 36.36 and 40, 127.27 and 140, or 318.18 and 350 ft³ classes one tier lower
+ * than it used to, and prices accordingly.
+ *
+ * VEHICLE_CLASSES and VEHICLE_CAPACITY_RANGES derive from this object rather
+ * than restating it, which is how the three sets drifted apart before.
  */
 export const VEHICLE_CLASS_MAX_RAW_FT3 = {
-  A: 36.36,
-  B: 127.27,
-  C: 318.18,
+  A: 40,
+  B: 140,
+  C: 350,
 } as const;
 
 // ===== VEHICLE CLASS CATALOG (display metadata) =====
