@@ -2000,13 +2000,26 @@ export function findBestMatch(
   itemName: string,
   hintVolumeFt3?: number,
 ): { item: FurnitureItem; similarity: number } | null {
-  const nameLower = itemName.toLowerCase();
+  // Normalise the sofa-bed spellings to the one the rows actually carry. The
+  // keyword bonus below is a substring test against the query, so the 'sofa bed'
+  // keyword could never fire on "sofabed" or "sofa-bed" — one missing space made
+  // every sofa-bed row unreachable while 'sofa' still matched, handing the win to
+  // the first ordinary sofa in the array.
+  const nameLower = itemName.toLowerCase().replace(/sofa[\s-]?bed/g, 'sofa bed');
   const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
   
   // Extract key category hints from the input name
   const hasChairHint = nameLower.includes('chair');
   const hasSofaHint = nameLower.includes('sofa') || nameLower.includes('couch');
   const hasBedHint = nameLower.includes('bed');
+  // A sofa bed names both families, so the two hints above fight each other:
+  // hasBedHint fired a 0.5 mismatch penalty on the correct row, because a sofa
+  // bed is category 'Sofa', not 'Bed'. Recognising the compound lets the Sofa Bed
+  // subcategory be scored on its own terms instead of being penalised for its name.
+  const hasSofaBedHint =
+    nameLower.includes('sofa bed') ||
+    nameLower.includes('sleeper') ||
+    nameLower.includes('pull-out sofa');
   // 'desk' must not fire on "desktop": a 2.21 ft3 "Desktop computer (tower)"
   // was earning the Table bonus and matching "Office desk (standard)" at
   // 29.8 ft3, a 13x overestimate.
@@ -2026,7 +2039,12 @@ export function findBestMatch(
     let categoryMismatchPenalty = 0;
     if (hasChairHint && item.category !== 'Chair') categoryMismatchPenalty = 0.5;
     if (hasSofaHint && item.category !== 'Sofa') categoryMismatchPenalty = 0.5;
-    if (hasBedHint && item.category !== 'Bed') categoryMismatchPenalty = 0.5;
+    // A Sofa Bed row is exempt: it is category 'Sofa' by design, so the bed hint
+    // would otherwise penalise the one family the query actually named.
+    const isSofaBedRow = item.subcategory === 'Sofa Bed';
+    if (hasBedHint && item.category !== 'Bed' && !(hasSofaBedHint && isSofaBedRow)) {
+      categoryMismatchPenalty = 0.5;
+    }
     if (hasTableHint && item.category !== 'Table') categoryMismatchPenalty = 0.5;
     
     // Calculate similarity based on word matching
@@ -2066,6 +2084,11 @@ export function findBestMatch(
     // CATEGORY MATCH BONUS: If category explicitly matches, boost score
     if (hasChairHint && item.category === 'Chair') matchCount += 2;
     if (hasSofaHint && item.category === 'Sofa') matchCount += 2;
+    // Same weight as the category bonuses above, but keyed on subcategory: the
+    // competing rows are all category 'Sofa', so only the subcategory separates
+    // them. The -1 keeps an ordinary sofa from winning on its shared keywords.
+    if (hasSofaBedHint && isSofaBedRow) matchCount += 2;
+    if (hasSofaBedHint && item.category === 'Sofa' && !isSofaBedRow) matchCount -= 1;
     if (hasBedHint && item.category === 'Bed') matchCount += 2;
     if (hasTableHint && item.category === 'Table') matchCount += 2;
     
