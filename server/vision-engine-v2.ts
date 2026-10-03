@@ -871,8 +871,12 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
       ? (est.length_cm * est.width_cm * est.height_cm) / 28316.8
       : undefined;
 
-  // Use the item name to find best match
-  const match = findBestMatch(visionResult.itemName, hintVolumeFt3);
+  // Use the item name to find best match, with the model's subcategory as a hint
+  const match = findBestMatch(
+    visionResult.itemName,
+    hintVolumeFt3,
+    visionResult.subcategory,
+  );
   
   if (match && match.similarity >= SIMILARITY_THRESHOLD) {
     console.log('[Vision Engine 2.0] Database match found:', 

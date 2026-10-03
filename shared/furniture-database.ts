@@ -2066,7 +2066,22 @@ export function searchItemsByKeywords(keywords: string[]): FurnitureItem[] {
 export function findBestMatch(
   itemName: string,
   hintVolumeFt3?: number,
+  hintSubcategory?: string,
 ): { item: FurnitureItem; similarity: number } | null {
+  // The vision model's subcategory, as a hint. Never a gate: a mismatch costs
+  // nothing, so wiring it in cannot make a currently-correct match fail.
+  //
+  // Two layers, because the stored subcategories are coarse. All six sectional
+  // rows carry subcategory 'Sectional' and all six sofa-bed rows carry
+  // 'Sofa Bed', so a subcategory-to-subcategory comparison gives every tying row
+  // the same bonus and changes no ranking. What the model actually returns
+  // ("pull-out queen sleeper", "U-shaped large", "baby grand") overlaps the row
+  // NAME, so the second layer scores its tokens against name + keywords.
+  const subHint = (hintSubcategory ?? '').toLowerCase().trim();
+  const subHintUsable = subHint.length > 0 && subHint !== 'unknown';
+  const subHintTokens = subHintUsable
+    ? subHint.split(/\s+/).filter(t => t.length >= 3)
+    : [];
   // Normalise the sofa-bed spellings to the one the rows actually carry. The
   // keyword bonus below is a substring test against the query, so the 'sofa bed'
   // keyword could never fire on "sofabed" or "sofa-bed" — one missing space made
@@ -2171,6 +2186,31 @@ export function findBestMatch(
     
     // Apply category mismatch penalty
     score = score * (1 - categoryMismatchPenalty);
+
+    // SUBCATEGORY HINT — additive only, applied after the name-token score so
+    // the 0.70 threshold keeps its existing meaning for every row that already
+    // cleared it.
+    if (subHintUsable) {
+      const rowSub = item.subcategory.toLowerCase().trim();
+      // Layer 1: subcategory vs subcategory.
+      if (rowSub === subHint) {
+        score += 0.15;
+      } else if (
+        rowSub.length >= 4 &&
+        subHint.length >= 4 &&
+        (rowSub.includes(subHint) || subHint.includes(rowSub))
+      ) {
+        score += 0.08;
+      }
+      // Layer 2: the hint's own words against this row's name and keywords.
+      // Capped so it can lift a size variant past its siblings without ever
+      // outweighing the name match that chose the family.
+      if (subHintTokens.length > 0) {
+        const haystack = `${itemNameLower} ${item.keywords.join(' ')}`;
+        const hits = subHintTokens.filter(t => haystack.includes(t)).length;
+        score += Math.min(hits * 0.06, 0.18);
+      }
+    }
     
     candidates.push({ item, score });
 
