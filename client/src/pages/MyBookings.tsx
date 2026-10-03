@@ -1482,7 +1482,7 @@ function MoveStatusDialog({ bookingId, onClose }: { bookingId: string | null; on
           <div className="flex items-center justify-center py-10">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : !events || events.length === 0 ? (
+        ) : !Array.isArray(events) || events.length === 0 ? (
           <div className="flex flex-col items-center py-10 gap-3 text-center">
             <Clock className="w-10 h-10 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground font-medium">No updates yet</p>

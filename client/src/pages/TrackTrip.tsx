@@ -45,8 +45,12 @@ interface LocationData {
     name: string;
     phone: string;
     vehicleType: string;
-    rating: number;
-  };
+    // Postgres decimal, so the API hands this back as a string ("4.85"), not a
+    // number. The /location endpoint is the only one that coerces it with
+    // `?? 0`; every other caller parseFloats it. Typing it `number` here is
+    // what made `.toFixed()` throw on every booking with a mover attached.
+    rating: number | string | null;
+  } | null;
 }
 
 const mapContainerStyle = {
@@ -98,6 +102,14 @@ function getStatusMessage(status: string, moverName?: string): { title: string; 
     default:
       return { title: "Tracking your move", subtitle: "Live updates when mover starts" };
   }
+}
+
+// Ratings come off a decimal column, so they can arrive as a string, a number
+// or null. Returns null when there is nothing sensible to show rather than
+// rendering "NaN".
+function formatRating(value: number | string | null | undefined): string | null {
+  const n = typeof value === "number" ? value : parseFloat(String(value ?? ""));
+  return Number.isFinite(n) ? n.toFixed(1) : null;
 }
 
 // Smooth interpolation between positions
@@ -470,6 +482,7 @@ export default function TrackTrip() {
   const dropoff = locationData.dropoff;
   const currentLocation = locationData.currentLocation;
   const statusMessage = getStatusMessage(locationData.status, locationData.mover?.name);
+  const moverRating = formatRating(locationData.mover?.rating);
   const isLive = !!currentLocation && ACTIVE_STATUSES.includes(locationData.status as BookingStatus);
 
   // Calgary downtown as fallback if geocoding was never stored for this booking
@@ -710,17 +723,21 @@ export default function TrackTrip() {
               <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-2xl">
                 <Avatar className="h-14 w-14">
                   <AvatarFallback className="bg-primary text-primary-foreground text-lg">
-                    {locationData.mover.name.charAt(0).toUpperCase()}
+                    {locationData.mover.name?.charAt(0)?.toUpperCase() || "M"}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-foreground truncate" data-testid="text-mover-name">
-                    {locationData.mover.name}
+                    {locationData.mover.name || "Your mover"}
                   </p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span data-testid="text-mover-rating">{(locationData.mover.rating ?? 0).toFixed(1)}</span>
-                    <span className="mx-1">•</span>
+                    {moverRating && (
+                      <>
+                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                        <span data-testid="text-mover-rating">{moverRating}</span>
+                        <span className="mx-1">•</span>
+                      </>
+                    )}
                     <Truck className="w-4 h-4" />
                     <span className="capitalize">{locationData.mover.vehicleType}</span>
                   </div>
