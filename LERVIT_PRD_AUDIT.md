@@ -69,7 +69,6 @@ LervIT1/
 │   ├── background-jobs.ts  9 cron jobs
 │   ├── notifications.ts    Email (Resend) + SMS (Telnyx)
 │   ├── vision-engine-v2.ts AI image identification pipeline
-│   ├── ai-identifier.ts    AI identifier layer
 │   ├── ai-support-analyzer.ts  AI support copilot
 │   ├── websocket.ts        Mover-only WebSocket server
 │   ├── objectStorage.ts    Replit Object Storage wrapper

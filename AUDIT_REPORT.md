@@ -202,7 +202,7 @@ No EventEmitter, Redis pub/sub, Kafka, RabbitMQ, or Postgres LISTEN/NOTIFY. The 
 
 `server/ai-support-analyzer.ts` — GPT-4o hardcoded (lines 130, 316, 469). Persists to `aiSupportInsights`.
 
-`server/ai-identifier.ts` — Superseded by vision-engine-v2, still in tree.
+`server/ai-identifier.ts` — **deleted** (superseded by vision-engine-v2; was dead code with no importers).
 
 **No prompt registry.** No versioning. No A/B testing. No structured output schema (raw JSON string-parsed with markdown-fence stripping). `aiRuns.totalCost` exists but is not automatically populated — token counts are logged, dollars are not.
 

@@ -669,7 +669,6 @@ Current database includes:
 | Component | Path |
 |-----------|------|
 | Vision Engine V2.0 | `server/vision-engine-v2.ts` |
-| AI Identifier (V1.0 legacy) | `server/ai-identifier.ts` |
 | Furniture Database | `shared/furniture-database.ts` |
 | Dimension Corrector | `server/dimension-corrector.ts` |
 | Vision Queue (async) | `server/vision-queue.ts` |
