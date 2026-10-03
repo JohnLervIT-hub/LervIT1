@@ -709,19 +709,27 @@ SECTIONAL SOFA SIZE CLASSIFICATION (CRITICAL — use visual cues to determine si
 For sectional sofas, you MUST classify as Small, Medium, or Large based on these cues:
 • Count the number of seat cushions visible
 • Check seat depth (standard ~55cm vs deep-seat ~70cm+)
-• Look for a chaise or ottoman section
+• Look for a chaise or ottoman section, and judge how long it is
 • Compare to nearby objects (doors are ~200cm tall, standard doorways ~80cm wide)
 • Count how many separable pieces/sections you can identify
+Estimate the total footprint from room context and proportions, then pick the
+tier whose footprint it is closest to.
 
 L-SHAPED SECTIONAL TIERS:
-• SMALL (2-piece, apartment-size): 2-3 seat cushions, compact chaise, fits against one wall. ~230×150×85cm, 70kg
-• MEDIUM (3-piece, standard): 4-5 seat cushions, standard chaise, fills a corner. ~300×180×85cm, 120kg
-• LARGE (4-5 piece, oversized/deep-seat): 6+ seat cushions, wide/deep seats, oversized chaise or ottoman. ~370×220×90cm, 170kg
+• SMALL (2-piece, apartment-size): 2-3 seat cushions, compact chaise (~140cm or less), fits against one wall. Footprint ~220×150cm or less. ~230×150×85cm, 70kg
+• MEDIUM (3-piece, standard): 4-5 seat cushions, longer chaise, fills a corner. Footprint ~270×200cm. ~270×200×85cm, 120kg
+• LARGE (4-5 piece, oversized/deep-seat): 6+ seat cushions, wide/deep seats, long chaise or oversized ottoman. Footprint ~370×220cm or more. ~370×220×90cm, 170kg
 
 U-SHAPED SECTIONAL TIERS:
 • SMALL (compact, 3-piece): 5-6 seat cushions, narrow arms. ~280×200×85cm, 130kg
 • MEDIUM (standard, 4-5 piece): 7-8 seat cushions, standard depth. ~350×250×85cm, 180kg
 • LARGE (oversized, 6+ piece): 9+ seat cushions, theater/pit style, deep seats. ~420×300×90cm, 240kg
+
+SECTIONAL SMALL/MEDIUM TIEBREAK:
+For L-shaped and U-shaped sectionals only, when you are uncertain between SMALL
+and MEDIUM, default to SMALL. This is a deliberate exception to the general
+SIZING RULE below. It does not apply to any other item type, and it does not
+apply to the MEDIUM/LARGE boundary — there, keep rounding up.
 
 Include the size tier in the item name (e.g., "Small L-shaped sectional sofa", "Large U-shaped sectional sofa").
 
@@ -785,6 +793,7 @@ If the image shows a scene with many cardboard moving boxes (not a single item):
 SIZING RULE:
 When uncertain between two size estimates, always choose the LARGER option.
 Moving trucks need real-world space. Underestimating causes job failures and driver disputes.
+The one exception is the sectional SMALL/MEDIUM tiebreak stated above.
 
 QUANTITY FIELD:
 For sets or counted items, include quantity.
