@@ -1190,7 +1190,11 @@ export default function MyBookings() {
 
       {/* Image Preview Dialog */}
       <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
+        {/* [&>button]:hidden suppresses the built-in Radix close. This dialog
+            already renders its own styled close button at the same top-4 right-4
+            spot, so both were stacked and screen readers announced two
+            "Close" controls. Same pattern as ui/sidebar.tsx. */}
+        <DialogContent className="max-w-4xl p-0 bg-black/95 border-none [&>button]:hidden">
           <DialogTitle className="sr-only">Image Preview</DialogTitle>
           <DialogDescription className="sr-only">
             Viewing image {previewIndex + 1} of {previewImages.length}

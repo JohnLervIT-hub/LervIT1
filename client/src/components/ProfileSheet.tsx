@@ -117,7 +117,11 @@ export function ProfileSheet() {
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-80 p-0">
-        <SheetHeader className="p-6 pb-4">
+        {/* pt-10 clears the Sheet's close button, which Radix positions
+            absolutely at top-4 right-4 (16px icon, so its bottom edge is 32px).
+            With p-0 on the content the header would otherwise start at 24px and
+            a long display name's first line could run under the X. */}
+        <SheetHeader className="p-6 pt-10 pb-4">
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
               <AvatarImage src={avatarUrl || undefined} alt={user.name} />
