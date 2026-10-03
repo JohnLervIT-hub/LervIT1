@@ -231,6 +231,39 @@ function capitalizeFirst(str: string): string {
  * it is the one guard for a vision-estimated item that matched nothing in the
  * database and so carries no vehicle tag to floor on.
  */
+/**
+ * Items that need a Moving Truck whatever their volume says — matched on the
+ * item name. These replace the per-item database vehicle floor, which lifted the
+ * displayed tier above the volume tier on 22 items and was the reason the card
+ * could disagree with the volume beside it.
+ *
+ * Matched against `itemName`, the only name the client holds. For a database
+ * match that is the vision model's wording ("Grand piano", "8-foot pool table"),
+ * so the keywords are substrings rather than exact row names.
+ */
+const TRUCK_REQUIRED_ITEMS = [
+  'piano',
+  'pool table',
+  'hot tub',
+  'gun safe',
+  'safe',
+  'billiard',
+  'washing machine',
+  'washer',
+  'dryer',
+  'refrigerator',
+  'fridge',
+  'freezer',
+  'motorcycle',
+] as const;
+
+function requiresTruck(items: IdentifiedItem[]): boolean {
+  return items.some((item) => {
+    const name = (item.itemName || '').toLowerCase();
+    return TRUCK_REQUIRED_ITEMS.some((kw) => name.includes(kw));
+  });
+}
+
 const VAN_MIN_CM = 270;
 const PICKUP_MIN_CM = 150;
 
@@ -1655,9 +1688,10 @@ export default function RequestMove() {
           ...completedAll.map(function(item) { return item.recommendedMovers || 1; })
         );
 
-        const itemTotalWeight = completedAll.reduce(
-          function(sum, item) { return sum + parseFloat(item.weightKg || '0'); }, 0
-        );
+        // Weight no longer touches vehicle selection — it drives movers and the
+        // heavy-item surcharge only. The weight bumps raised the displayed tier
+        // while calculatePrice kept classing on volume, so the card and the
+        // quote disagreed on 64 of 124 items.
         const hasHeavyItems = completedAll.some(function(item) {
           return (
             item.handlingComplexity === 'high' ||
@@ -1665,14 +1699,6 @@ export default function RequestMove() {
             parseFloat(item.weightKg || '0') > 30
           );
         });
-
-        // Weight bumps: capped at +1 tier above volume-based tier.
-        // Real payload limits: pickup ~600 kg, van ~900 kg, truck 2000+ kg.
-        // Prevents single/dual heavy items from jumping straight to "Moving Truck".
-        const volumeTierIndex1 = tierIndex;
-        if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex1 + 1, 3);
-        else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex1 + 1, 2);
-        else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex1 + 1, 1);
 
         const maxDimension = Math.max(
           ...completedAll.map(function(item) {
@@ -1683,19 +1709,13 @@ export default function RequestMove() {
             );
           })
         );
+        // Length floor only: a 160cm item does not fit an SUV, and past
+        // VAN_MIN_CM it does not fit a pickup bed tailgate-down either.
         if (maxDimension > VAN_MIN_CM && tierIndex < 2)      tierIndex = 2;
         else if (maxDimension > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
-        if (hasHeavyItems && tierIndex < 1)           tierIndex = 1;
 
-        // DATABASE VEHICLE FLOOR: honour the per-item vehicle assignment from the ground
-        // truth database. Items like a 450 kg hot tub are tagged vehicle='truck' in the DB;
-        // volume alone can't reflect that, so we take the highest vehicleType across all
-        // identified items and ensure we never recommend below it.
-        const VEHICLE_TIER_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
-        const maxDbTier = completedAll.reduce(
-          function(max, item) { return Math.max(max, VEHICLE_TIER_RANK[item.vehicleType || 'car'] ?? 0); }, 0
-        );
-        if (maxDbTier > tierIndex) tierIndex = maxDbTier;
+        // Specialty override: a piano or hot tub needs a truck at any volume.
+        if (requiresTruck(completedAll)) tierIndex = 3;
 
         const recommendedLoadSize = loadSizeTiers[tierIndex];
         const recommendedVehicle  = vehicleTiers[tierIndex];
@@ -1776,19 +1796,12 @@ export default function RequestMove() {
     else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
 
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
-    const itemTotalWeight = completedItems.reduce(
-      (sum, item) => sum + parseFloat(item.weightKg || '0'), 0
-    );
+    // Weight drives movers and the surcharge only, never vehicle selection.
     const hasHeavyItems = completedItems.some(item =>
       item.handlingComplexity === 'high' ||
       item.handlingComplexity === 'very_high' ||
       parseFloat(item.weightKg || '0') > 30
     );
-
-    const volumeTierIndex2 = tierIndex;
-    if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex2 + 1, 3);
-    else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex2 + 1, 2);
-    else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex2 + 1, 1);
 
     const maxDim = Math.max(...completedItems.map(item =>
       Math.max(
@@ -1799,14 +1812,8 @@ export default function RequestMove() {
     ));
     if (maxDim > VAN_MIN_CM && tierIndex < 2)      tierIndex = 2;
     else if (maxDim > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
-    if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
 
-    // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
-    const VEHICLE_TIER_RANK2: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
-    const maxDbTier2 = completedItems.reduce(
-      (max, item) => Math.max(max, VEHICLE_TIER_RANK2[item.vehicleType || 'car'] ?? 0), 0
-    );
-    if (maxDbTier2 > tierIndex) tierIndex = maxDbTier2;
+    if (requiresTruck(completedItems)) tierIndex = 3;
 
     setAiDetectedVolume(totalVolume);
     setAiRecommendedVehicle(vehicleTiers[tierIndex]);
@@ -1854,20 +1861,12 @@ export default function RequestMove() {
     // Get max recommended movers
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
     
-    // Check for heavy/complex items
-    const itemTotalWeight = completedItems.reduce((sum, item) => sum + parseFloat(item.weightKg || '0'), 0);
+    // Heavy flag feeds the surcharge and movers only, not vehicle selection.
     const hasHeavyItems = completedItems.some(item => 
       item.handlingComplexity === 'high' || 
       item.handlingComplexity === 'very_high' ||
       parseFloat(item.weightKg || '0') > 30
     );
-    
-    // Weight bumps: capped at +1 tier above volume-based tier.
-    // Real payload limits: pickup ~600 kg, van ~900 kg, truck 2000+ kg.
-    const volumeTierIndex3 = tierIndex;
-    if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex3 + 1, 3);
-    else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex3 + 1, 2);
-    else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex3 + 1, 1);
     
     // DIMENSION OVERRIDE: Check max dimension across all items
     const maxDimRecalc = Math.max(...completedItems.map(item => {
@@ -1879,14 +1878,8 @@ export default function RequestMove() {
     }));
     if (maxDimRecalc > VAN_MIN_CM && tierIndex < 2) tierIndex = 2;
     else if (maxDimRecalc > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
-    if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
 
-    // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
-    const VEHICLE_TIER_RANK3: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
-    const maxDbTier3 = completedItems.reduce(
-      (max, item) => Math.max(max, VEHICLE_TIER_RANK3[item.vehicleType || 'car'] ?? 0), 0
-    );
-    if (maxDbTier3 > tierIndex) tierIndex = maxDbTier3;
+    if (requiresTruck(completedItems)) tierIndex = 3;
     
     const recommendedLoadSize = loadSizeTiers[tierIndex];
 
