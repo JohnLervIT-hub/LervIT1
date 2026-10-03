@@ -70,7 +70,7 @@ These features are deployed and appear to work but will silently fail on every t
 | Feature | Root cause | Impact |
 |---|---|---|
 | **All email notifications** | `RESEND_API_KEY` not set — `resend` client initialises to `null` at startup | Abandoned booking reminders, Stripe Connect onboarding reminders (1st/2nd/3rd), move confirmation emails, partner rejection emails, post-move feedback surveys — all silently drop |
-| **Vision Engine (AI Item Detection)** | `OPENAI_API_KEY` not set — `ai-identifier.ts` line 8 reads it at module load | Photo analysis on booking Step 2 returns no AI result; load size / vehicle recommendation falls back to manual input only |
+| **Vision Engine (AI Item Detection)** | `OPENAI_API_KEY` not set — `vision-engine-v2.ts` line 50 reads it at module load | Photo analysis on booking Step 2 returns no AI result; load size / vehicle recommendation falls back to manual input only |
 | **AI Support Copilot** | `OPENAI_API_KEY` not set — `ai-support-analyzer.ts` line 99 guards with early return | Admin support ticket analysis produces no summaries, classifications, or suggested responses |
 
 ### Schema gaps in production
