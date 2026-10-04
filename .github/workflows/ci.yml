@@ -41,6 +41,19 @@ jobs:
       # Add eslint.config.js and run: npx eslint . --ext .ts,.tsx
       # to enable full lint checks once ESLint is configured.
 
+  schema-drift:
+    name: Schema Drift Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # No npm ci: the checker imports only node builtins, so installing the
+      # dependency tree would add minutes and buy nothing.
+      - name: Check sync-schema.sql covers all shared/schema.ts columns
+        run: node scripts/check-schema-drift.js
+
   smoke-test:
     name: Smoke Test (Build)
     runs-on: ubuntu-latest
