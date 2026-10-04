@@ -4,13 +4,26 @@ import ws from "ws";
 import * as schema from "@shared/schema";
 neonConfig.webSocketConstructor = ws;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
+function getConnectionString(): string {
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
+  }
+  // Fall back to individual PG env vars (PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT)
+  const host = process.env.PGHOST;
+  const user = process.env.PGUSER;
+  const password = process.env.PGPASSWORD;
+  const database = process.env.PGDATABASE;
+  if (!host || !user || !database) {
+    throw new Error(
+      "No database connection configured. Set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE.",
+    );
+  }
+  const port = process.env.PGPORT || '5432';
+  const encodedPassword = password ? encodeURIComponent(password) : '';
+  return `postgresql://${user}:${encodedPassword}@${host}:${port}/${database}?sslmode=require`;
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({ connectionString: getConnectionString() });
 
 pool.on('error', (err) => {
   console.error('[DB Pool] Connection error — will recover on next query:', err.message);
