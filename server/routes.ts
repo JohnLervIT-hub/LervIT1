@@ -6019,10 +6019,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Read before the write: `booking` below is the updated row, so its
-      // status is already 'cancelled' by the time the emit runs.
-      const previousStatusForCancel = updates.status === BOOKING_STATUSES.CANCELLED
+      // status is already 'cancelled' / 'completed' by the time the emits run.
+      // Completion needs the same read for a second reason: to tell a real
+      // transition from a PATCH replayed onto an already-completed booking.
+      // The transition table makes 'completed' terminal, but that validation
+      // only runs on the mover-authorized branch above, so it cannot be
+      // relied on here.
+      const isTerminalTransition =
+        updates.status === BOOKING_STATUSES.CANCELLED ||
+        updates.status === BOOKING_STATUSES.COMPLETED;
+      const previousStatus = isTerminalTransition
         ? (await storage.getBooking(req.params.id))?.status ?? null
         : null;
+
+      const isNewCompletion =
+        updates.status === BOOKING_STATUSES.COMPLETED &&
+        previousStatus !== BOOKING_STATUSES.COMPLETED;
+
+      // rearmMissedReviewCalls filters on `completedAt is not null`, so a
+      // booking completed through this path without it is invisible to the
+      // boot sweep even once the event below is emitted.
+      if (isNewCompletion) {
+        (updates as any).completedAt = new Date();
+      }
 
       const booking = await storage.updateBooking(req.params.id, updates as any);
       if (!booking) {
@@ -6038,7 +6057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updates.status === BOOKING_STATUSES.CANCELLED) {
         await emitEvent('booking.cancelled', 'booking', booking.id, {
           customerId: booking.customerId,
-          previousStatus: previousStatusForCancel,
+          previousStatus,
           moverId: booking.moverId ?? null,
           cancellationReason: booking.cancellationReason ?? null,
           cancellationComments: booking.cancellationAnswers ?? null,
@@ -6058,6 +6077,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
             cancellationReason: booking.cancellationReason ?? null,
             cancellationComments: booking.cancellationAnswers ?? null,
             reason: 'customer_cancelled',
+          },
+          'system',
+        );
+      }
+
+      // Completion emitted both ways, matching the mover-side complete route
+      // (POST /api/bookings/:id/complete). emitEvent only inserts a
+      // business_events row; agentEventBus is what the subscriptions in
+      // agents/subscriptions.ts listen on, so only the second call reaches
+      // Nova's review call and Kai's review request. This path previously
+      // emitted neither, so a booking completed here got no follow-up at all.
+      //
+      // Guarded on isNewCompletion: a replayed PATCH would otherwise fire a
+      // second review request and a duplicate Kai winback.
+      if (isNewCompletion) {
+        await emitEvent('booking.completed', 'booking', booking.id, {
+          moverId: booking.moverId ?? null,
+          customerId: booking.customerId,
+          price: booking.price,
+          distanceKm: booking.distance,
+          expectedCompletionAt: booking.expectedCompletionAt ?? null,
+          slaDeadlineAt: booking.slaDeadlineAt ?? null,
+          completedAt: (booking.completedAt ?? new Date()).toISOString(),
+          onTime: booking.slaDeadlineAt
+            ? Date.now() <= new Date(booking.slaDeadlineAt).getTime()
+            : null,
+        });
+
+        await agentEventBus.emit(
+          'booking.completed',
+          {
+            bookingId: booking.id,
+            customerId: booking.customerId,
+            moverId: booking.moverId ?? null,
           },
           'system',
         );
@@ -6207,10 +6260,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Booking not found" });
       }
       
+      // Same reasoning as PATCH /api/bookings/:id: this path has no transition
+      // validation at all, so the previous status is what keeps a repeated
+      // correction from emitting a second completion.
+      const isNewCompletion =
+        updates.status === BOOKING_STATUSES.COMPLETED &&
+        existingBooking.status !== BOOKING_STATUSES.COMPLETED;
+
+      if (isNewCompletion) {
+        (updates as any).completedAt = new Date();
+      }
+
       const booking = await storage.updateBooking(bookingId, updates);
 
       if (updates.status === BOOKING_STATUSES.COMPLETED || updates.status === BOOKING_STATUSES.CANCELLED) {
         await releaseMoverFromBooking(existingBooking.moverId, bookingId);
+      }
+
+      // Admin-forced completion emits the same pair as the mover route, so the
+      // review follow-up fires for a booking closed out by hand.
+      if (isNewCompletion && booking) {
+        await emitEvent('booking.completed', 'booking', bookingId, {
+          moverId: booking.moverId ?? null,
+          customerId: booking.customerId,
+          price: booking.price,
+          distanceKm: booking.distance,
+          expectedCompletionAt: booking.expectedCompletionAt ?? null,
+          slaDeadlineAt: booking.slaDeadlineAt ?? null,
+          completedAt: (booking.completedAt ?? new Date()).toISOString(),
+          onTime: booking.slaDeadlineAt
+            ? Date.now() <= new Date(booking.slaDeadlineAt).getTime()
+            : null,
+          source: 'admin_force_update',
+        });
+
+        await agentEventBus.emit(
+          'booking.completed',
+          {
+            bookingId,
+            customerId: booking.customerId,
+            moverId: booking.moverId ?? null,
+          },
+          'system',
+        );
       }
       
       console.log(`[Admin] Force-updated booking ${bookingId}: status=${updates.status || 'unchanged'}, paymentStatus=${updates.paymentStatus || 'unchanged'}`);

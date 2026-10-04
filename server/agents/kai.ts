@@ -618,7 +618,16 @@ CTA link: ${APP_BASE_URL}/request-move`,
         return;
       }
 
-      if (booking.status !== 'completed' || booking.paymentStatus !== 'paid') {
+      // 'paid' is never written to bookings.paymentStatus — the real values are
+      // pending / succeeded / failed / refunded, and the completion routes
+      // require 'succeeded'. Guarding on 'paid' alone made this method return
+      // early every time, so the review SMS never sent. Accepting both matches
+      // the paid-status sets in background-jobs.ts (:1237, :2496).
+      const PAID_STATUSES = ['paid', 'succeeded'];
+      if (
+        booking.status !== 'completed' ||
+        !PAID_STATUSES.includes(booking.paymentStatus ?? '')
+      ) {
         logger.info(
           { bookingId, status: booking.status, paymentStatus: booking.paymentStatus },
           'Kai: sendReviewRequest — skipping, not completed/paid',

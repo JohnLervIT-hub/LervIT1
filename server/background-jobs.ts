@@ -674,7 +674,8 @@ export function initBackgroundJobs() {
 }
 
 /**
- * Re-arm Nova review calls lost to a restart.
+ * Re-arm the post-completion review follow-ups lost to a restart — Nova's
+ * review call and Kai's Google-review SMS, each with its own marker event.
  *
  * booking.completed schedules the review call with an in-process setTimeout
  * 2h out, so every deploy drops the pending calls for bookings completed in
@@ -746,6 +747,74 @@ async function rearmMissedReviewCalls() {
     logger.info({ scanned: recent.length, rearmed }, '[Boot] review call reconciliation complete');
   } catch (err) {
     logger.error({ err }, '[Boot] review call reconciliation failed');
+  }
+
+  // Kai's Google-review SMS is armed by the same booking.completed handler and
+  // lost to a restart the same way, but the Nova sweep above cannot cover it:
+  // it probes for 'nova.call_initiated', which says nothing about whether the
+  // SMS went out. Separate pass, separate marker event.
+  try {
+    const paidStatuses = ['paid', 'succeeded'];
+
+    const recent = await db
+      .select({ id: bookings.id, completedAt: bookings.completedAt })
+      .from(bookings)
+      .where(
+        and(
+          isNotNull(bookings.completedAt),
+          gte(bookings.completedAt, lookback),
+          eq(bookings.status, BOOKING_STATUSES.COMPLETED),
+          inArray(bookings.paymentStatus, paidStatuses),
+        ),
+      )
+      .limit(50);
+
+    let rearmed = 0;
+
+    for (const booking of recent) {
+      const [sent] = await db
+        .select({ id: businessEvents.id })
+        .from(businessEvents)
+        .where(
+          and(
+            eq(businessEvents.entityId, booking.id),
+            eq(businessEvents.eventType, 'kai.review_request_sent'),
+          ),
+        )
+        .limit(1);
+
+      if (sent) continue;
+
+      // Same 2h offset the subscription uses, so a booking completed minutes
+      // before the restart is not texted early.
+      const dueAt = (booking.completedAt?.getTime() ?? Date.now()) + REVIEW_CALL_DELAY_MS;
+      const delayMs = Math.max(0, dueAt - Date.now());
+
+      logger.info(
+        { bookingId: booking.id, delayMs },
+        '[Boot] re-arming missed Kai review request',
+      );
+
+      // sendReviewRequest is a public method, not an `execute` action — kai.run
+      // would throw 'unknown action'. It re-checks status/payment and skips a
+      // booking that already has a review, so a replay is harmless.
+      setTimeout(() => {
+        void kai
+          .sendReviewRequest(booking.id)
+          .catch((err) =>
+            logger.error({ err, bookingId: booking.id }, '[Boot] re-armed review request failed'),
+          );
+      }, delayMs);
+
+      rearmed++;
+    }
+
+    logger.info(
+      { scanned: recent.length, rearmed },
+      '[Boot] review request reconciliation complete',
+    );
+  } catch (err) {
+    logger.error({ err }, '[Boot] review request reconciliation failed');
   }
 }
 
