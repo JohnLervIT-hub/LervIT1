@@ -6105,15 +6105,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             : null,
         });
 
-        await agentEventBus.emit(
-          'booking.completed',
-          {
-            bookingId: booking.id,
-            customerId: booking.customerId,
-            moverId: booking.moverId ?? null,
-          },
-          'system',
-        );
+        // Skip agent events for backdated corrections — customer move was >3 days ago
+        const daysSinceMove =
+          (Date.now() - new Date(booking.preferredDate).getTime()) / (1000 * 60 * 60 * 24);
+        // A preferredDate that will not parse yields NaN, and `NaN <= 3` is
+        // false — which would silently swallow the follow-up, the exact failure
+        // this chain was just fixed for. Fall through to emitting instead.
+        const emitReviewEvents = !Number.isFinite(daysSinceMove) || daysSinceMove <= 3;
+
+        if (emitReviewEvents) {
+          await agentEventBus.emit(
+            'booking.completed',
+            {
+              bookingId: booking.id,
+              customerId: booking.customerId,
+              moverId: booking.moverId ?? null,
+            },
+            'system',
+          );
+        } else {
+          logger.info(
+            { bookingId: booking.id, daysSinceMove: Math.round(daysSinceMove) },
+            '[Booking] backdated completion — business_events logged, agent events skipped',
+          );
+        }
       }
 
       // Availability holds — this handler is both a legacy direct-acceptance
@@ -6294,15 +6309,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           source: 'admin_force_update',
         });
 
-        await agentEventBus.emit(
-          'booking.completed',
-          {
-            bookingId,
-            customerId: booking.customerId,
-            moverId: booking.moverId ?? null,
-          },
-          'system',
-        );
+        // Skip agent events for backdated corrections — customer move was >3 days ago
+        const daysSinceMove =
+          (Date.now() - new Date(booking.preferredDate).getTime()) / (1000 * 60 * 60 * 24);
+        // A preferredDate that will not parse yields NaN, and `NaN <= 3` is
+        // false — which would silently swallow the follow-up, the exact failure
+        // this chain was just fixed for. Fall through to emitting instead.
+        const emitReviewEvents = !Number.isFinite(daysSinceMove) || daysSinceMove <= 3;
+
+        if (emitReviewEvents) {
+          await agentEventBus.emit(
+            'booking.completed',
+            {
+              bookingId,
+              customerId: booking.customerId,
+              moverId: booking.moverId ?? null,
+            },
+            'system',
+          );
+        } else {
+          logger.info(
+            { bookingId, daysSinceMove: Math.round(daysSinceMove) },
+            '[Admin] backdated completion — business_events logged, agent events skipped',
+          );
+        }
       }
       
       console.log(`[Admin] Force-updated booking ${bookingId}: status=${updates.status || 'unchanged'}, paymentStatus=${updates.paymentStatus || 'unchanged'}`);
