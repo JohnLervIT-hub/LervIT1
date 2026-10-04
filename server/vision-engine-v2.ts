@@ -693,9 +693,17 @@ SECTIONAL ITEM NAME — shape only, NO size tier:
 • Cannot tell shape → itemName: "sectional sofa"
 Do NOT include Small/Medium/Large in the sectional itemName. Size is determined from your dimension estimate downstream.
 
-DIMENSION GUIDANCE FOR SECTIONALS (estimate carefully from the photo):
-L-shaped: compact fits ~230×150cm footprint; standard fills a corner ~270×200cm; large/oversized ~370×220cm
-U-shaped: compact ~280×200cm; standard ~350×250cm; large pit-style ~380×260cm
+DIMENSION GUIDANCE FOR SECTIONALS (measure from the photo — no tier presets):
+Do NOT recall a "typical" sectional size, and do not round your estimate toward
+one. The size tier is resolved downstream from the numbers you report here, so a
+copied preset collapses every sectional onto the same row whatever its real size.
+Derive the scale from what is actually visible in the frame:
+• Seat height is ~45cm from the floor and back height ~85-90cm on nearly every
+  sectional. Use one of those to fix the pixel-to-cm scale, then apply that scale
+  to the other axes.
+• Doorways are ~80cm wide and ~200cm tall; a standard ceiling is ~245cm.
+• Length = the longest run. Width = the perpendicular depth the piece occupies
+  (for a U, arm tip to arm tip across the open side). Height = measured at the back.
 
 SOFA BED / SLEEPER DETECTION (CRITICAL — check for these indicators):
 Before classifying any sofa, check for sofa bed / sleeper indicators:
