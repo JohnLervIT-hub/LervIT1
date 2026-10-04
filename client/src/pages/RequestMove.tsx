@@ -1457,6 +1457,9 @@ export default function RequestMove() {
   // adding new photos only analyzes the incremental batch, keeping existing
   // item prices stable.
   const analyzedUrlsRef = useRef(new Set<string>());
+  // Photos we have already auto-retried once. Without this, a persistent 429
+  // would have each retry schedule another retry forever.
+  const retryAttemptedUrlsRef = useRef(new Set<string>());
 
   // Save AI-identified items to the database once the booking is created (runs once)
   const hasSavedItemsRef = useRef(false);
@@ -1549,10 +1552,14 @@ export default function RequestMove() {
   };
   ============================================================ */
 
+  // Breathing room before an automatic retry: long enough to read the toast,
+  // and a beat for a rate limit to clear.
+  const VISION_RETRY_DELAY_MS = 3000;
+
   // AI Product Identifier - Identify items from uploaded photos.
   // Only NEW (unanalyzed) photos are sent to the Vision Engine each time;
   // results are merged with existing items so previously-analyzed prices stay stable.
-  const handleIdentifyItems = async (photoUrls?: string[], forceAll?: boolean) => {
+  const handleIdentifyItems = async (photoUrls?: string[], forceAll?: boolean): Promise<void> => {
     const allUrls = photoUrls || images;
 
     if (allUrls.length === 0) {
@@ -1611,12 +1618,66 @@ export default function RequestMove() {
         // Keep the photos in the grid — customer must replace them, not lose them
       }
 
+      // Transient analysis failures — a 429, a timeout, malformed JSON. The
+      // server marks these retryable because the photo is fine and our call
+      // failed; that is the opposite of needsReplacement, which asks for a
+      // different picture, so the two sets never overlap.
+      const retryableUrls: string[] = (result.errors || [])
+        .filter(function(e: any) { return e.retryable && !e.needsReplacement; })
+        .map(function(e: any) { return e.photoUrl as string; })
+        .filter(function(url: string) { return !!url; });
+
+      const toRetry = retryableUrls.filter(function(url: string) {
+        return !retryAttemptedUrlsRef.current.has(url);
+      });
+      const exhausted = retryableUrls.filter(function(url: string) {
+        return retryAttemptedUrlsRef.current.has(url);
+      });
+
+      // Second consecutive failure on the same photo: stop and say so.
+      if (exhausted.length > 0) {
+        toast({
+          title: "Still having trouble",
+          description: exhausted.length > 1
+            ? `We're having trouble analysing ${exhausted.length} photos. You can add them to notes instead.`
+            : "We're having trouble analysing one photo. You can add it to notes instead.",
+          variant: "destructive",
+        });
+      }
+
+      if (toRetry.length > 0) {
+        toast({
+          title: "Retrying analysis",
+          description: toRetry.length > 1
+            ? `We couldn't analyse ${toRetry.length} photos — retrying in a moment…`
+            : "We couldn't analyse one photo — retrying in a moment…",
+        });
+        toRetry.forEach(function(url) {
+          // Mark BEFORE scheduling: the retry's own response routes through
+          // this same block, and finding the url here is what makes it fall
+          // into `exhausted` instead of scheduling a third pass.
+          retryAttemptedUrlsRef.current.add(url);
+          // Clear the dedup guard, or handleIdentifyItems filters the url out
+          // as already-analysed and returns early.
+          analyzedUrlsRef.current.delete(url);
+        });
+        setTimeout(function() { handleIdentifyItems(toRetry); }, VISION_RETRY_DELAY_MS);
+      }
+
       // Merge with the ref (always current, avoids stale closure from async gap).
       // Exclude needsReplacement items from the displayed identified list (they have no data).
       const successfulNewItems = newItems.filter(function(item) {
         return !rejectedUrls.includes(item.photoUrl || '');
       });
-      const merged = [...identifiedItemsRef.current, ...successfulNewItems];
+      // Drop any existing row for the photos in this batch before appending.
+      // A no-op on a normal run (newUrls are urls never analysed), but on a
+      // retry it is what replaces the failed row with the real result instead
+      // of leaving both on screen.
+      const batchUrls = new Set(newUrls);
+      const keptItems = identifiedItemsRef.current.filter(function(item) {
+        return !batchUrls.has(item.photoUrl || '');
+      });
+      const merged = [...keptItems, ...successfulNewItems];
       identifiedItemsRef.current = merged;
       setIdentifiedItems(merged);
 
