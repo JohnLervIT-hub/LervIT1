@@ -257,6 +257,12 @@ export function getVehicleClassFromVolume(rawVolumeCuft: number): VehicleClass {
  * Volume alone cannot see length: a 203cm king mattress is 34.6 raw ft³ and a
  * 219cm 98-inch TV is 3.9, so both class as A on volume while fitting in no
  * SUV. This floor only ever lifts A → B.
+ *
+ * It exists for items that CANNOT be disassembled — long rigid things like
+ * king mattresses, dining tables and lumber, whose measured length is the
+ * length that has to go in the vehicle. It is deliberately not applied to
+ * anything above A: see getVehicleClassFromVolumeAndLength below for why
+ * assembled length stops being a useful signal once a load is pickup-sized.
  */
 export const LENGTH_FLOOR_CM = 150;
 
@@ -272,9 +278,20 @@ export const LENGTH_FLOOR_CM = 150;
  * band stays a pickup however long it is. Weight never enters vehicle
  * selection at all.
  *
- * A B → C lift at 200cm was added and reverted (479f79b, then this). It is a
- * deliberate policy choice, not an oversight — raising it again means deciding
- * that a 230cm sectional inside the 130 ft³ pickup band should bill as a van.
+ * WHY THERE IS NO B → C LENGTH LIFT — read this before adding one.
+ *
+ * Sectionals and large sofas are disassembled for transport. The assembled
+ * length is not a reliable proxy for what physically fits in a vehicle. Volume
+ * is therefore the primary vehicle determinant. The A → B length floor (150cm)
+ * exists only for items that cannot be disassembled — long rigid items such as
+ * king mattresses, dining tables, and lumber.
+ *
+ * This is why a 230cm L-sectional at 103.6 ft³ correctly classes as a Pickup:
+ * it travels as sections, none of them 230cm. A B → C lift at 200cm was added
+ * in 479f79b on the reasoning that 230cm exceeds a pickup bed, and reverted in
+ * 468de47 once that reasoning was recognised as applying the assembled
+ * dimension to a load that never travels assembled. It looks like a missing
+ * guard every time someone audits a long item in the pickup band; it is not.
  */
 export function getVehicleClassFromVolumeAndLength(
   rawVolumeCuft: number,
