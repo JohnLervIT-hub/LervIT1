@@ -1754,3 +1754,16 @@ ALTER TABLE bookings
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_customer_idempotency_key_unique
   ON bookings (customer_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- ===== 0042: pre-move SMS reminder =====
+-- Mirrors migrations/0042_bookings_pre_move_reminder.sql. startup-migrate.js runs
+-- only this file, never migrations/, so the columns must be here too.
+-- IF NOT EXISTS is mandatory here: this file runs on every boot.
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS pre_move_reminder_count   integer   NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS pre_move_reminder_sent_at timestamp;
+
+-- Supports the daily sweep's `count = 0 AND status = ...` scan.
+CREATE INDEX IF NOT EXISTS bookings_pre_move_reminder_idx
+  ON bookings (pre_move_reminder_count, status)
+  WHERE pre_move_reminder_count = 0;
