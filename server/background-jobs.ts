@@ -1751,14 +1751,18 @@ function calgaryTimeLabel(date: Date | string | null | undefined): string | null
 function buildPreMoveReminderSms(firstName: string, preferredDate: Date | string): string {
   const time = calgaryTimeLabel(preferredDate);
   const availability = time ? `Be available from ${time} onward` : 'Be available from your scheduled time onward';
+  // ASCII only, deliberately. A single checkmark or em dash forces the whole
+  // body to UCS-2, which drops the segment size from 153 septets to 67
+  // characters - the same text costs well over twice as many segments. Keep
+  // every character in this builder inside GSM-7.
   return [
     `Hi ${firstName}, your LervIT move is tomorrow!`,
-    '✓ Seal and label all boxes',
-    '✓ Disassemble large furniture if possible (beds, desks)',
-    '✓ Reserve elevator access if needed',
-    `✓ ${availability}`,
+    '* Seal and label all boxes',
+    '* Disassemble large furniture if possible (beds, desks)',
+    '* Reserve elevator access if needed',
+    `* ${availability}`,
     'Need to change anything? Reply or call us before 8pm tonight.',
-    '— LervIT Team',
+    '- LervIT Team',
   ].join('\n');
 }
 
