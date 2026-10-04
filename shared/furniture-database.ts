@@ -2105,19 +2105,22 @@ export function findBestMatch(itemName: string, volumeHint?: number): { item: Fu
  * ===== VEHICLE SELECTION THRESHOLDS =====
  * Single source of truth for volume-to-vehicle mapping
  * 
- * Updated thresholds (2026):
- * Raw ft³ boundaries aligned with getVehicleClassFromVolume in shared/pricing.ts
- * (adjusted-volume thresholds of 60/150/350 divided by packingFactor 1.10):
+ * Raw ft³ boundaries. Hand-mirrored from VEHICLE_CLASS_MAX_RAW_FT3 in
+ * shared/pricing.ts — this file cannot import that one without a cycle, so the
+ * two must be changed together:
  *   ≤54 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes  [Class A]
  *   ≤136 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
- *   ≤318 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
- *   >318 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
+ *   ≤260 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
+ *   >260 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
+ *
+ * These comments previously quoted 318 against a constant of 260, which is how
+ * the two drifted unnoticed. Read the constant, and fix both together.
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
   CAR_MAX: 54,       // raw ≤ 54 ft³   → Class A (SUV)
   PICKUP_MAX: 136,   // raw ≤ 136 ft³  → Class B (Pickup Truck)
   VAN_MAX: 260,      // raw ≤ 260 ft³  → Class C (Cargo Van)
-  // Above 318 ft³ → Class E (Moving Truck)
+  // Above 260 ft³ → Class E (Moving Truck)
 };
 
 /**

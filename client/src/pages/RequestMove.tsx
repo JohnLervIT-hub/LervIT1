@@ -21,7 +21,7 @@ import { CustomAddressInput, cleanAddress } from "@/components/CustomAddressInpu
 import { isInServiceArea, serviceAreaFieldMessage } from "@shared/serviceArea";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2, Phone } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
-import { calculatePrice, PRICING_CONFIG, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
+import { calculatePrice, calculatePriceRange, PRICING_CONFIG, type PriceBreakdown, type PriceRange, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
@@ -45,6 +45,48 @@ import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/b
 // Minimum booking lead time. Mirrors the server-side guard in POST /api/bookings —
 // the input `min` only discourages a bad date, it does not enforce one.
 const MIN_LEAD_TIME_MS = 2 * 60 * 60 * 1000;
+
+function isValidEmail(value: string): boolean {
+  const trimmed = value.trim();
+  // One @, something either side, a dot in the domain, no whitespace.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
+/** Canadian numbers are 10 digits, or 11 with the country code. */
+function isValidPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 11) return digits.startsWith('1');
+  return digits.length === 10;
+}
+
+const BOOKING_IDEM_KEY_STORAGE = 'lervit_booking_idem_key';
+
+/**
+ * Per-attempt idempotency key for POST /api/bookings.
+ *
+ * Stable for the tab session: a second submit reuses it, so the server hands
+ * back the booking the first submit created instead of a twin. It deliberately
+ * is NOT rotated after a successful create — the server only replays an UNPAID
+ * booking, so once payment lands the same key naturally starts a new booking.
+ *
+ * sessionStorage throws in some privacy modes, and crypto.randomUUID needs a
+ * secure context; both fall back rather than blocking the submit.
+ */
+function getBookingIdempotencyKey(): string {
+  const mint = () =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `k-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  try {
+    const existing = sessionStorage.getItem(BOOKING_IDEM_KEY_STORAGE);
+    if (existing) return existing;
+    const key = mint();
+    sessionStorage.setItem(BOOKING_IDEM_KEY_STORAGE, key);
+    return key;
+  } catch {
+    return mint();
+  }
+}
 
 const HEAVY_ITEM_PREMIUMS_TIERED: Record<string, number> = { slight: 5, moderate: 10, high: 15, very_high: 30 };
 const HEAVY_ITEM_PREMIUM_CAP = 150;
@@ -173,6 +215,16 @@ function capitalizeFirst(str: string): string {
 
 // Vehicle tiers, ranked smallest → largest. A load's vehicle is the max tier
 // across its identified items. VEHICLE_TIER_KEYS order must match the ranks.
+/** Longest side, in cm, across every identified item. 0 when nothing is known. */
+function maxLengthCm(items: IdentifiedItem[]): number {
+  return items.reduce((max, item) => Math.max(
+    max,
+    parseFloat(String(item.dimensionsLcm || 0)),
+    parseFloat(String(item.dimensionsWcm || 0)),
+    parseFloat(String(item.dimensionsHcm || 0)),
+  ), 0);
+}
+
 const VEHICLE_LABELS: Record<string, string> = {
   car: 'SUV',
   pickup: 'Pickup Truck',
@@ -198,6 +250,22 @@ export default function RequestMove() {
   const [step, setStep] = useState(1);
   const [contactCaptured, setContactCaptured] = useState(false);
   const [capturedContact, setCapturedContact] = useState<{ name: string; phone: string; email: string } | null>(null);
+  // Confirmation-step contact details. Required before submitting: a booking with
+  // no reachable phone leaves the assigned mover unable to make contact.
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [confirmPhone, setConfirmPhone] = useState('');
+  const [confirmContactTouched, setConfirmContactTouched] = useState(false);
+  // Persistent inline error for the mandatory-photos gate. A toast alone was
+  // invisible on mobile (it rendered behind the fixed header) and vanishes
+  // anyway, leaving no standing explanation for why Next did nothing.
+  // Tracked separately from numberOfMovers, which is overwritten the moment the
+  // customer picks a different count. Without it the advisory below cannot tell
+  // "AI said 2, you chose 1" from "AI said 1" — heavyItem is true for a 35kg
+  // recliner the AI assigns one mover, and for the manual Heavy Items toggle
+  // when no analysis has run.
+  const [aiRecommendedMovers, setAiRecommendedMovers] = useState<number | undefined>(undefined);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoSectionRef = useRef<HTMLDivElement>(null);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const quoteSaveInFlight = useRef(false);
   // Format a Date as YYYY-MM-DDTHH:MM in the user's LOCAL timezone
@@ -314,6 +382,7 @@ export default function RequestMove() {
     total: 0,
     vehicleClass: 'A',
     adjustedVolume: 0,
+    volumeSource: 'default',
     rawVolume: 0,
     numberOfMovers: 1,
     forcedTwoMovers: false,
@@ -322,6 +391,9 @@ export default function RequestMove() {
     perKmRate: 0,
   });
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(emptyBreakdown());
+  // Bracket shown in place of the headline number until the vision engine
+  // measures the load. Null once the volume is real (or before any price exists).
+  const [priceRange, setPriceRange] = useState<PriceRange | null>(null);
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
 
@@ -757,7 +829,9 @@ export default function RequestMove() {
 
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
-      const res = await apiRequest("POST", "/api/bookings", bookingData);
+      const res = await apiRequest("POST", "/api/bookings", bookingData, {
+        "X-Idempotency-Key": getBookingIdempotencyKey(),
+      });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Unable to create booking. Please try again.');
@@ -1208,7 +1282,7 @@ export default function RequestMove() {
             premiumKey: (i as { premiumKey?: string | null }).premiumKey ?? null,
           }));
         const hasKeyedPremiums = detectedItems.some(d => !!d.premiumKey);
-        const breakdown = calculatePrice({
+        const priceInputs = {
           distanceKm: estimateDistance,
           loadSize,
           pickupDifficulty,
@@ -1216,11 +1290,21 @@ export default function RequestMove() {
           heavyItem,
           numberOfMovers,
           volumeCuft: aiDetectedVolume,
+          // Longest side floors Class A → B, so the quote agrees with the
+          // vehicle shown on the recommendation card.
+          maxLengthCm: maxLengthCm(
+            identifiedItems.filter(i => i.processingStatus === 'completed'),
+          ),
           detectedItems,
           // Legacy fallback only fires when the vision engine emitted no keyed premiums
           // (e.g. older items detected before premiumKey wiring, or non-premium items).
           heavyItemFeeOverride: hasKeyedPremiums ? undefined : getItemTypePremium(identifiedItems),
-        });
+        };
+        const breakdown = calculatePrice(priceInputs);
+        // Spans boxes->apartment while the volume is unmeasured, so it is NOT
+        // `breakdown` at either end — breakdown sits on whatever tier loadSize
+        // happens to hold, which the customer no longer picks.
+        const range = calculatePriceRange(priceInputs);
         // countHeavyItems retained for legacy telemetry only.
         void countHeavyItems(identifiedItems);
         // Blank the breakdown on step 1 only until the vision engine has
@@ -1231,8 +1315,12 @@ export default function RequestMove() {
           const step1Preview = emptyBreakdown();
           step1Preview.distanceKm = breakdown.distanceKm;
           setPriceBreakdown(step1Preview);
+          setPriceRange(null);
         } else {
           setPriceBreakdown(breakdown);
+          // A measured volume collapses the range (isRange false), so the
+          // display switches back to the single price on its own.
+          setPriceRange(range);
         }
         setPricingError(null);
       } catch (error) {
@@ -1241,8 +1329,28 @@ export default function RequestMove() {
       }
     } else {
       setPriceBreakdown(emptyBreakdown());
+      setPriceRange(null);
     }
   }, [step, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, identifiedItems]);
+
+  // Prefill the confirmation contact from the account, then the lead-capture
+  // details, without clobbering anything already typed.
+  useEffect(() => {
+    setConfirmEmail(prev => prev || user?.email || capturedContact?.email || '');
+    setConfirmPhone(prev => prev || user?.phone || capturedContact?.phone || '');
+  }, [user?.email, user?.phone, capturedContact?.email, capturedContact?.phone]);
+
+  const confirmEmailError = !confirmEmail.trim()
+    ? 'Email is required to send your quote.'
+    : !isValidEmail(confirmEmail)
+      ? 'Enter a valid email address.'
+      : null;
+  const confirmPhoneError = !confirmPhone.trim()
+    ? 'Phone number is required so your mover can reach you.'
+    : !isValidPhone(confirmPhone)
+      ? 'Enter a 10-digit phone number.'
+      : null;
+  const contactDetailsComplete = !confirmEmailError && !confirmPhoneError;
 
   // Hard lock: whenever the calculator forces 2 movers, sync local selection.
   useEffect(() => {
@@ -1578,6 +1686,7 @@ export default function RequestMove() {
 
         setLoadSize(recommendedLoadSize);
         setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+        setAiRecommendedMovers(maxMovers > 1 ? 2 : 1);
         setHeavyItem(hasHeavyItems);
         setHasAutoAnalyzed(true);
 
@@ -1624,6 +1733,7 @@ export default function RequestMove() {
       // Nothing left — reset to manual defaults
       setAiDetectedVolume(undefined);
       setAiRecommendedVehicle(undefined);
+      setAiRecommendedMovers(undefined);
       setLoadSize('medium');
       setNumberOfMovers(1);
       setHeavyItem(false);
@@ -1672,6 +1782,7 @@ export default function RequestMove() {
 
     setLoadSize(loadSizeTiers[tierIndex]);
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+    setAiRecommendedMovers(maxMovers > 1 ? 2 : 1);
     setHeavyItem(hasHeavyItems);
   };
 
@@ -1686,6 +1797,7 @@ export default function RequestMove() {
       setIdentifiedItems(filtered);
       recalcFromItems(filtered);
     }
+    if (newUrls.length > 0) setPhotoError(null);
     setImages(newUrls);
   };
 
@@ -1768,6 +1880,7 @@ export default function RequestMove() {
     // Apply recommendations
     setLoadSize(recommendedLoadSize);
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+    setAiRecommendedMovers(maxMovers > 1 ? 2 : 1);
     setHeavyItem(hasHeavyItems);
     
     toast({
@@ -1908,9 +2021,15 @@ export default function RequestMove() {
           return;
         }
         
+        const message = "Please upload at least one photo to get your exact quote.";
+        setPhotoError(message);
+        // The toast is transient and sits under the fixed header on mobile.
+        // Bring the persistent inline error into view so there is always a
+        // visible reason Next did nothing.
+        photoSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         toast({
           title: "Photos required",
-          description: "Please upload at least one photo of your items to continue.",
+          description: message,
           variant: "destructive",
         });
         return;
@@ -1940,6 +2059,19 @@ export default function RequestMove() {
         toast({
           title: "Pick a later time",
           description: "Your move must be booked at least 2 hours from now.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Contact details. The submit button is already disabled without them;
+      // this catches a stale render or a keyboard submit, and reveals the inline
+      // errors for a customer who never focused the fields.
+      if (!contactDetailsComplete) {
+        setConfirmContactTouched(true);
+        toast({
+          title: "Contact details needed",
+          description: confirmEmailError ?? confirmPhoneError ?? "Please add your email and phone.",
           variant: "destructive",
         });
         return;
@@ -2712,7 +2844,7 @@ export default function RequestMove() {
                     </div>
                     ============================================================ */}
 
-                    <div>
+                    <div ref={photoSectionRef} className="scroll-mt-24">
                       <Label className="text-base font-semibold mb-2 block">
                         Upload Photos of Your Items
                       </Label>
@@ -2725,6 +2857,21 @@ export default function RequestMove() {
                         onAnalyze={handleAutoAnalyze}
                         maxImages={10} 
                       />
+
+                      {/* Sits directly under the upload zone, not at the top of
+                          the page, so it cannot end up behind the fixed header
+                          at any scroll position. */}
+                      {photoError && (
+                        <div
+                          className="mt-3 flex items-start gap-2.5 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5"
+                          role="alert"
+                          aria-live="polite"
+                          data-testid="error-photos-required"
+                        >
+                          <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                          <p className="text-sm text-destructive leading-relaxed">{photoError}</p>
+                        </div>
+                      )}
                       
                       {/* Show analyzing status when AI is processing in background */}
                       {isIdentifyingItems && (
@@ -2826,6 +2973,27 @@ export default function RequestMove() {
                               </Alert>
                             );
                           })()}
+
+                          {/* Soft advisory: the AI asked for 2 movers and the customer
+                              chose 1. Purely informational — the 1-mover button stays
+                              enabled, unlike the forcedTwoMovers lock above.
+                              Gated on aiRecommendedMovers === 2 rather than heavyItem
+                              alone, because heavyItem is true for a 35kg recliner the
+                              AI gives one mover, and for the manual Heavy Items toggle
+                              when no analysis has run — in both cases the copy's claim
+                              would be false. */}
+                          {!forcedTwoMovers && numberOfMovers === 1 && aiRecommendedMovers === 2 &&
+                            (heavyItem || aiRecommendedVehicle === 'van' || aiRecommendedVehicle === 'truck') && (
+                            <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" data-testid="alert-movers-advisory">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
+                                <strong>AI recommended 2 movers for this load.</strong> With 1 mover,
+                                you'll need to assist with carrying. Not recommended for heavy or
+                                large items.
+                              </AlertDescription>
+                            </Alert>
+                          )}
+
                           <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             <button
                               type="button"
@@ -3193,6 +3361,7 @@ export default function RequestMove() {
             <div className="flex flex-col gap-4 lg:sticky lg:top-20">
               <PricingSummary
                 breakdown={priceBreakdown}
+                priceRange={priceRange}
                 isCalculating={isCalculatingPrice}
                 error={pricingError}
                 showPromoInput={false}
@@ -3202,6 +3371,80 @@ export default function RequestMove() {
                 isLoggedIn={!!user}
                 onContactCapture={handleContactCapture}
               />
+
+              {/* Contact details — required before submitting, but deliberately
+                  BELOW the price: the customer sees what the move costs first,
+                  then gives us a way to reach them. */}
+              {step === 3 && (
+                <Card data-testid="confirm-contact">
+                  <CardContent className="pt-5 space-y-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Phone className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm">Where can we reach you?</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Your mover needs these to confirm the job.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Read-only once it comes from the account: the account
+                        email is the login identity and changing it needs
+                        re-verification, which nothing here can do. Leaving it
+                        editable would accept a change and silently discard it. */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="confirm-email" className="text-sm">Email</Label>
+                      <Input
+                        id="confirm-email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        placeholder="you@example.com"
+                        value={confirmEmail}
+                        onChange={(e) => setConfirmEmail(e.target.value)}
+                        onBlur={() => setConfirmContactTouched(true)}
+                        readOnly={!!user?.email}
+                        className={user?.email ? 'bg-muted/50 text-muted-foreground' : undefined}
+                        aria-invalid={confirmContactTouched && !!confirmEmailError}
+                        data-testid="input-confirm-email"
+                      />
+                      {user?.email ? (
+                        <p className="text-xs text-muted-foreground">
+                          Your quote goes to your account email. Change it in your profile.
+                        </p>
+                      ) : confirmContactTouched && confirmEmailError ? (
+                        <p className="text-xs text-destructive" data-testid="error-confirm-email">
+                          {confirmEmailError}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="confirm-phone" className="text-sm">Phone</Label>
+                      <Input
+                        id="confirm-phone"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        placeholder="(403) 555-0123"
+                        value={confirmPhone}
+                        onChange={(e) => setConfirmPhone(e.target.value)}
+                        onBlur={() => setConfirmContactTouched(true)}
+                        aria-invalid={confirmContactTouched && !!confirmPhoneError}
+                        data-testid="input-confirm-phone"
+                      />
+                      {confirmContactTouched && confirmPhoneError && (
+                        <p className="text-xs text-destructive" data-testid="error-confirm-phone">
+                          {confirmPhoneError}
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between gap-4">
                   <Button
@@ -3223,7 +3466,11 @@ export default function RequestMove() {
                     onClick={handleNext}
                     className="flex-1"
                     data-testid="button-next"
-                    disabled={createBookingMutation.isPending || isIdentifyingItems}
+                    disabled={
+                      createBookingMutation.isPending ||
+                      isIdentifyingItems ||
+                      (step === 3 && !contactDetailsComplete)
+                    }
                   >
                     {step === 3 && createBookingMutation.isPending ? (
                       <>
