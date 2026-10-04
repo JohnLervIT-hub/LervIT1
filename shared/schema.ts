@@ -417,8 +417,17 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   // Add enum validation for pricing-related fields
   pickupDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
   dropoffDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
-  // Updated load size categories based on volume (FT³)
-  // boxes: 0-20 ft³, medium: 21-165 ft³, large: 166-300 ft³, apartment: >300 ft³
+  // Load size categories by raw volume (ft³), matching VEHICLE_CLASS_MAX_RAW_FT3
+  // in shared/pricing.ts and getLoadSizeFromVolume in shared/furniture-database.ts:
+  //   boxes: ≤20, medium: 21-130, large: 131-260, apartment: >260
+  //
+  // Required here because the column is notNull and InsertBooking is inferred
+  // from this schema. POST /api/bookings overrides it to .optional() on the
+  // request body and derives the stored value from the summed item volumes via
+  // getLoadSizeFromVolume: calculatePrice falls back to loadSize when no
+  // measured volume is present, so a body-settable value was a price input the
+  // customer chose. The booking form no longer offers a load-size picker
+  // either — it is sent only as a pre-photo hint.
   loadSize: z.enum(['boxes', 'medium', 'large', 'apartment']),
   numberOfMovers: z.number().int().min(1).max(2),
 });

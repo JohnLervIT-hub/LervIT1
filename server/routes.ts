@@ -88,6 +88,18 @@ import {
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
 import { isInServiceArea, serviceAreaApiMessage } from "@shared/serviceArea";
+import { getLoadSizeFromVolume } from "@shared/furniture-database";
+
+/**
+ * Load size assumed when a booking carries no measured volume.
+ *
+ * The booking form makes photos mandatory, so every booking through the UI has
+ * a measured volume and never reaches this. It exists for direct API calls, and
+ * is a fixed server-side constant rather than the request body's loadSize so
+ * that the one remaining path to calculatePrice's volume fallback cannot be
+ * chosen by the caller. 'medium' matches the form's own pre-photo default.
+ */
+const DEFAULT_UNMEASURED_LOAD_SIZE = 'medium' as const;
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
@@ -4477,6 +4489,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerId: z.string().optional(),
           pickupAddress: z.string().min(1, "Pickup address is required"),
           dropoffAddress: z.string().min(1, "Dropoff address is required"),
+          // Server-derived below from the summed item volumes. Accepted but not
+          // required, and never used: see serverLoadSize.
+          loadSize: z.enum(['boxes', 'medium', 'large', 'apartment']).optional(),
           preSelectedMoverId: z.string().optional(), // For direct mover selection from Browse Movers page
         }),
         { ...req.body, customerId: user.id }
@@ -4606,6 +4621,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           Math.max(max, it.dimensionsLcm, it.dimensionsWcm, it.dimensionsHcm),
         0,
       );
+      // Server-derived, like the volume and the longest side above. The body's
+      // loadSize is a pre-photo hint only: calculatePrice falls back to it when
+      // no measured volume is present, so honouring a client-supplied value let
+      // the customer pick their own volume tier. Falls back to the DEFAULT
+      // rather than the body value when nothing was measured — photos are
+      // mandatory in the form, so that path is a direct API call.
+      const serverLoadSize = aiDetectedVolumeCuft !== undefined
+        ? getLoadSizeFromVolume(aiDetectedVolumeCuft)
+        : DEFAULT_UNMEASURED_LOAD_SIZE;
+      if (bookingData.loadSize && bookingData.loadSize !== serverLoadSize) {
+        logEvent.booking('client_load_size_ignored', {
+          customerId: user.id,
+          clientLoadSize: bookingData.loadSize,
+          serverLoadSize,
+          serverVolumeCuft: aiDetectedVolumeCuft ?? null,
+        });
+      }
+
       // Canonical mapping, not a second copy of the thresholds: raw <=54 -> car,
       // <=136 -> pickup, <=260 -> van, else truck.
       const derivedRecommendedVehicle = aiDetectedVolumeCuft !== undefined
@@ -4646,7 +4679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const priceBreakdown = calculatePrice({
         distanceKm: distance,
-        loadSize: bookingData.loadSize,
+        loadSize: serverLoadSize,
         pickupDifficulty: bookingData.pickupDifficulty,
         dropoffDifficulty: bookingData.dropoffDifficulty,
         heavyItem: bookingData.heavyItem || false,
@@ -4731,7 +4764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerId: user.id,
         pickupAddress: bookingData.pickupAddress,
         dropoffAddress: bookingData.dropoffAddress,
-        loadSize: bookingData.loadSize,
+        loadSize: serverLoadSize,
         preferredDate: typeof bookingData.preferredDate === 'string' ? new Date(bookingData.preferredDate) : bookingData.preferredDate,
         pickupDifficulty: bookingData.pickupDifficulty,
         dropoffDifficulty: bookingData.dropoffDifficulty,
@@ -4837,7 +4870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       logEvent.booking('created', {
         bookingId: booking.id,
         customerId: user.id,
-        loadSize: bookingData.loadSize,
+        loadSize: serverLoadSize,
         distanceKm: distance,
         totalPrice: priceBreakdown.total,
         vehicleClass: priceBreakdown.vehicleClass,
@@ -4848,7 +4881,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerId: user.id,
         pickupAddress: booking.pickupAddress,
         dropoffAddress: booking.dropoffAddress,
-        loadSize: bookingData.loadSize,
+        loadSize: serverLoadSize,
         distanceKm: distance,
         price: priceBreakdown.total,
         vehicleClass: priceBreakdown.vehicleClass,
