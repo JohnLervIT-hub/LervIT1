@@ -52,6 +52,9 @@ export type VehicleType = 'car' | 'van' | 'pickup' | 'truck';
 /**
  * Calculate volume in cubic feet from dimensions in cm
  */
+import { getVehicleClassFromVolumeAndLength, vehicleTypeFromClass, VEHICLE_CLASS_MAX_RAW_FT3 } from './pricing';
+import { VEHICLE_DISPLAY_NAMES } from './vehicle-labels';
+
 function calcVolume(l: number, w: number, h: number): number {
   const volumeCm3 = l * w * h;
   const volumeFt3 = volumeCm3 / 28316.8;
@@ -2106,20 +2109,21 @@ export function findBestMatch(itemName: string, volumeHint?: number): { item: Fu
  * Single source of truth for volume-to-vehicle mapping
  * 
  * Raw ft³ boundaries, compared directly — no packing factor, no multiplication.
- * Hand-mirrored from VEHICLE_CLASS_MAX_RAW_FT3 in shared/pricing.ts; this file
- * cannot import that one without a cycle, so the two must be changed together:
  *   ≤20 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes  [Class A]
  *   ≤130 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
  *   ≤260 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
  *   >260 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
  *
- * These comments once quoted 318 against a constant of 260, which is how the
- * two drifted unnoticed. Read the constant, and fix both together.
+ * Derived from VEHICLE_CLASS_MAX_RAW_FT3 rather than restated. This was a hand
+ * mirror, justified by a comment claiming this file could not import
+ * shared/pricing.ts without a cycle — it can, pricing.ts imports nothing. The
+ * mirror is how the two drifted: these comments once quoted 318 against a
+ * constant of 260.
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
-  CAR_MAX: 20,       // raw ≤ 20 ft³   → Class A (SUV)
-  PICKUP_MAX: 130,   // raw ≤ 130 ft³  → Class B (Pickup Truck)
-  VAN_MAX: 260,      // raw ≤ 260 ft³  → Class C (Cargo Van)
+  CAR_MAX: VEHICLE_CLASS_MAX_RAW_FT3.A,       // raw ≤ 20 ft³   → Class A (SUV)
+  PICKUP_MAX: VEHICLE_CLASS_MAX_RAW_FT3.B,    // raw ≤ 130 ft³  → Class B (Pickup Truck)
+  VAN_MAX: VEHICLE_CLASS_MAX_RAW_FT3.C,       // raw ≤ 260 ft³  → Class C (Cargo Van)
   // Above 260 ft³ → Class E (Moving Truck)
 };
 
@@ -2156,13 +2160,30 @@ export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
  * @param totalWeightKg - Reserved for future use
  * @param maxDimensionCm - Reserved for future use
  */
+/**
+ * Vehicle for a load, from volume and longest side.
+ *
+ * Delegates to getVehicleClassFromVolumeAndLength in shared/pricing.ts — the
+ * same call calculatePrice and the booking form make — so the vehicle shown
+ * beside an item cannot disagree with the class it is billed at. It previously
+ * ignored every argument but the volume and returned getVehicleFromVolume,
+ * which meant a 230cm item inside the pickup volume band was recommended a
+ * pickup it does not fit in.
+ *
+ * `category` and `totalWeightKg` are accepted and deliberately unused: vehicle
+ * selection is volume plus longest side only. Weight never enters it (see
+ * LENGTH_FLOOR_CM in shared/pricing.ts), and both are kept so the vision
+ * engine's call sites, which log them, do not have to change.
+ */
 export function getVehicleRecommendationWithCategory(
   totalVolumeFt3: number,
   category: string,
   totalWeightKg?: number,
   maxDimensionCm?: number
 ): VehicleType {
-  return getVehicleFromVolume(totalVolumeFt3);
+  return vehicleTypeFromClass(
+    getVehicleClassFromVolumeAndLength(totalVolumeFt3, maxDimensionCm),
+  ) as VehicleType;
 }
 
 /**
@@ -2177,14 +2198,13 @@ export function getVehicleRecommendation(loadSize: LoadSizeCategory, weightKg: n
 }
 
 /**
- * Human-readable vehicle name for UI display
+ * Human-readable vehicle name for UI display.
+ *
+ * Reads shared/vehicle-labels.ts, like client/src/lib/utils.ts does. This was
+ * a hardcoded switch returning 'SUV / Small Vehicle' and 'Moving Truck
+ * (Large)' against that map's 'SUV' and 'Moving Truck' — the exact drift the
+ * map was introduced to end.
  */
 export function getVehicleDisplayName(vehicle: VehicleType): string {
-  switch (vehicle) {
-    case 'car': return 'SUV / Small Vehicle';
-    case 'van': return 'Cargo Van';
-    case 'pickup': return 'Pickup Truck';
-    case 'truck': return 'Moving Truck (Large)';
-    default: return 'Vehicle';
-  }
+  return (VEHICLE_DISPLAY_NAMES as Record<string, string>)[vehicle] ?? 'Vehicle';
 }

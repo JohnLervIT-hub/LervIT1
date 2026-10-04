@@ -172,10 +172,12 @@ export const LOAD_SIZE_CEILING_TIER = 'apartment';
  * couple of boxes. Anything above it quotes as a pickup at $30 base + $1.80/km
  * instead of $20 + $0.80/km.
  *
- * VEHICLE_CLASSES and VEHICLE_CAPACITY_RANGES derive from this object rather
- * than restating it, which is how the sets drifted apart before.
- * VEHICLE_VOLUME_THRESHOLDS in shared/furniture-database.ts mirrors it by hand
- * (that file cannot import this one without a cycle) — change both together.
+ * Every other threshold table derives from this object rather than restating
+ * it, which is how the sets drifted apart before: VEHICLE_CLASSES and
+ * VEHICLE_CAPACITY_RANGES below, and VEHICLE_VOLUME_THRESHOLDS in
+ * shared/furniture-database.ts, which imports it. (That import was long
+ * avoided on the grounds of a cycle; there is none — this file imports
+ * nothing, so the edge is one-way. Keep it that way.)
  */
 export const VEHICLE_CLASS_MAX_RAW_FT3 = {
   A: 20,
@@ -254,28 +256,44 @@ export function getVehicleClassFromVolume(rawVolumeCuft: number): VehicleClass {
  *
  * Volume alone cannot see length: a 203cm king mattress is 34.6 raw ft³ and a
  * 219cm 98-inch TV is 3.9, so both class as A on volume while fitting in no
- * SUV. This floor only ever lifts A → B. It never touches B, C or E, so volume
- * stays decisive for every larger load, and weight never enters vehicle
- * selection at all.
+ * SUV.
  */
 export const LENGTH_FLOOR_CM = 150;
 
 /**
- * Vehicle class from raw volume, with the longest-side floor applied.
+ * Longest-side length, in cm, past which a load stops being a pickup job.
  *
- * This is the canonical mapping for anything customer-facing: both
- * calculatePrice and the booking flow's recommendation card call it, so the
- * displayed vehicle and the charged class cannot drift apart.
+ * A standard pickup bed is about 198cm, so anything longer rides with the
+ * tailgate down or does not ride at all — it needs the enclosed length of a
+ * cargo van. A 230cm small L-sectional is 103.6 raw ft³, comfortably inside
+ * the 130 ft³ pickup band on volume alone, and does not fit a pickup.
+ */
+export const LENGTH_VAN_FLOOR_CM = 200;
+
+/**
+ * Vehicle class from raw volume, with the longest-side floors applied.
+ *
+ * This is the canonical mapping for anything customer-facing: calculatePrice,
+ * the booking flow's recommendation card and the vision engine all call it, so
+ * the displayed vehicle and the charged class cannot drift apart.
+ *
+ * Two lifts, applied in order, so a single very long item in a tiny load walks
+ * A → B → C:
+ *   > LENGTH_FLOOR_CM (150)      A → B   longer than an SUV can take
+ *   > LENGTH_VAN_FLOOR_CM (200)  B → C   longer than a pickup bed
+ *
+ * Neither lift touches C or E — volume stays decisive for every larger load,
+ * and weight never enters vehicle selection at all.
  */
 export function getVehicleClassFromVolumeAndLength(
   rawVolumeCuft: number,
   maxLengthCm?: number | null,
 ): VehicleClass {
-  const volumeClass = getVehicleClassFromVolume(rawVolumeCuft);
-  if (volumeClass === 'A' && typeof maxLengthCm === 'number' && maxLengthCm > LENGTH_FLOOR_CM) {
-    return 'B';
-  }
-  return volumeClass;
+  let vehicleClass = getVehicleClassFromVolume(rawVolumeCuft);
+  if (typeof maxLengthCm !== 'number') return vehicleClass;
+  if (vehicleClass === 'A' && maxLengthCm > LENGTH_FLOOR_CM) vehicleClass = 'B';
+  if (vehicleClass === 'B' && maxLengthCm > LENGTH_VAN_FLOOR_CM) vehicleClass = 'C';
+  return vehicleClass;
 }
 
 /** Map manual load size → vehicle class via the volume estimate. */
