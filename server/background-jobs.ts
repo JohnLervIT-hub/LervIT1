@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { getBaseUrl } from './utils/urls';
-import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, googleReviews, inAppNotifications, quotes, leads, contentItems } from '@shared/schema';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, googleReviews, inAppNotifications, quotes, leads, contentItems, agentLogs } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc, asc } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
@@ -47,6 +47,10 @@ const sentReminders = new Set<string>();
 // emails when Replit briefly runs two instances during a rolling deploy.
 const runningJobs = new Set<string>();
 
+// Calgary. node-cron takes it as an option, and the SQL day-boundary and the
+// SMS time label both read it, so the three cannot drift.
+const CRON_TZ_NAME = 'America/Edmonton';
+
 async function withJobLock<T>(jobName: string, fn: () => Promise<T>): Promise<T | null> {
   if (runningJobs.has(jobName)) {
     logger.warn({ event: 'job_skipped', jobName }, `Job ${jobName} already running, skipping tick`);
@@ -75,7 +79,7 @@ export function initBackgroundJobs() {
 
   logger.info({ event: 'background_jobs', action: 'init' }, 'Initializing background jobs');
 
-  const TZ = { timezone: 'America/Edmonton' };
+  const TZ = { timezone: CRON_TZ_NAME };
 
   // Merged into a single tick (was two separate */5 schedules competing for the DB)
   cron.schedule('*/5 * * * *', async () => {
@@ -213,6 +217,21 @@ export function initBackgroundJobs() {
         logger.info({ event: 'mark_scan_active_trips', summary }, 'Mark Shaw scan complete');
       } catch (err) {
         logger.error({ err, event: 'mark_scan_active_trips' }, 'Mark Shaw scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 10:00 Calgary — pre-move SMS the day before a confirmed move.
+  // Deliberately not an agent: no model call, no decision, just a query and a
+  // templated text, so it lives here with the other crons rather than in
+  // server/agents.
+  cron.schedule('0 10 * * *', async () => {
+    await withJobLock('pre_move_reminders', async () => {
+      try {
+        const summary = await sendPreMoveReminders();
+        logger.info({ event: 'pre_move_reminders', ...summary }, 'Pre-move reminder sweep complete');
+      } catch (err) {
+        logger.error({ err, event: 'pre_move_reminders' }, 'Pre-move reminder sweep failed');
       }
     });
   }, TZ);
@@ -1632,6 +1651,135 @@ async function cancelPastDatedBookings() {
 }
 
 // Track abandoned booking reminders to avoid duplicates
+/**
+ * Pre-move SMS, sent once the day before a confirmed move.
+ *
+ * Tomorrow is resolved in SQL rather than JavaScript. preferred_date is
+ * `timestamp without time zone` holding a UTC instant, so it is read back as
+ * UTC and converted to Calgary before the date is taken; `now()` is
+ * timestamptz, so it only needs the one conversion. Postgres owns the DST
+ * table, which hand-rolled offset arithmetic would get wrong twice a year —
+ * and a reminder that slips an hour across midnight is sent on the wrong day.
+ *
+ * Status: 'confirmed' is the marketplace path. Partner-routed bookings sit at
+ * status 'confirmed' too but carry their own enterprise_status, so 'assigned'
+ * is matched there — it is not a member of BOOKING_STATUSES and never appears
+ * in bookings.status.
+ */
+async function sendPreMoveReminders() {
+  const summary = { candidates: 0, sent: 0, failed: 0, skippedNoPhone: 0 };
+  try {
+    const rows = await db.execute<{
+      id: string;
+      preferredDate: Date;
+      firstName: string | null;
+      phone: string | null;
+    }>(sql`
+      SELECT
+        b.id              AS "id",
+        b.preferred_date  AS "preferredDate",
+        split_part(u.name, ' ', 1) AS "firstName",
+        u.phone           AS "phone"
+      FROM bookings b
+      JOIN users u ON u.id = b.customer_id
+      WHERE (b.status = ${BOOKING_STATUSES.CONFIRMED} OR b.enterprise_status = 'assigned')
+        AND b.pre_move_reminder_count = 0
+        AND u.phone_verified = true
+        AND u.phone IS NOT NULL
+        AND (b.preferred_date AT TIME ZONE 'UTC' AT TIME ZONE ${CRON_TZ_NAME})::date
+            = ((now() AT TIME ZONE ${CRON_TZ_NAME})::date + 1)
+      ORDER BY b.preferred_date ASC
+    `);
+
+    const candidates = rows.rows ?? [];
+    summary.candidates = candidates.length;
+
+    for (const booking of candidates) {
+      if (!booking.phone) {
+        summary.skippedNoPhone++;
+        continue;
+      }
+
+      const firstName = (booking.firstName || '').trim() || 'there';
+      const message = buildPreMoveReminderSms(firstName, booking.preferredDate);
+
+      try {
+        const ok = await notificationService.sendSMS({
+          to: booking.phone,
+          message,
+          type: 'booking_update',
+        });
+        if (!ok) throw new Error('sendSMS returned false');
+
+        // Only written after Telnyx accepts it, so a failure retries tomorrow
+        // — which, for a move that is tomorrow, means it does not retry. That
+        // is the right trade: a late reminder is worse than none.
+        await db.update(bookings)
+          .set({ preMoveReminderCount: 1, preMoveReminderSentAt: new Date() })
+          .where(eq(bookings.id, booking.id));
+
+        await logPreMoveReminder(booking.id, 'success');
+        summary.sent++;
+      } catch (err) {
+        logger.error({ err, bookingId: booking.id }, 'Pre-move reminder SMS failed');
+        await logPreMoveReminder(booking.id, 'failed', err);
+        summary.failed++;
+        // Deliberately continue: one bad number must not stop the sweep.
+      }
+    }
+  } catch (error) {
+    logEvent.error('sendPreMoveReminders', error);
+  }
+  return summary;
+}
+
+/** Calgary clock time as "9:00 AM", or null when the move has no stated time. */
+function calgaryTimeLabel(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const label = d.toLocaleTimeString('en-US', {
+    timeZone: CRON_TZ_NAME,
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  // Midnight is how a date-only booking lands once it is stored as a
+  // timestamp, so it reads as "no time given" rather than "come at 12am".
+  return label === '12:00 AM' ? null : label;
+}
+
+function buildPreMoveReminderSms(firstName: string, preferredDate: Date | string): string {
+  const time = calgaryTimeLabel(preferredDate);
+  const availability = time ? `Be available from ${time} onward` : 'Be available from your scheduled time onward';
+  return [
+    `Hi ${firstName}, your LervIT move is tomorrow!`,
+    '✓ Seal and label all boxes',
+    '✓ Disassemble large furniture if possible (beds, desks)',
+    '✓ Reserve elevator access if needed',
+    `✓ ${availability}`,
+    'Need to change anything? Reply or call us before 8pm tonight.',
+    '— LervIT Team',
+  ].join('\n');
+}
+
+async function logPreMoveReminder(bookingId: string, status: 'success' | 'failed', err?: unknown) {
+  try {
+    await db.insert(agentLogs).values({
+      agentName: 'pre_move_reminder',
+      agentCode: 'pre-move',
+      action: 'sms_sent',
+      status,
+      bookingId,
+      output: status === 'failed'
+        ? { error: err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300) }
+        : null,
+    });
+  } catch (logErr) {
+    // Never let the audit write take down the send loop.
+    logger.error({ err: logErr, bookingId }, 'Pre-move reminder: agent_logs insert failed');
+  }
+}
+
 async function sendAbandonedBookingReminders() {
   try {
     const now = new Date();

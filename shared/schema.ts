@@ -295,6 +295,13 @@ export const bookings = pgTable("bookings", {
   // surface another's booking.
   idempotencyKey: text("idempotency_key"),
 
+  // Pre-move SMS reminder, sent the day before the move. Count rather than a
+  // boolean, matching moverStripeAccounts.reminderCount / lastReminderAt: the
+  // cron gates on `= 0`, so a send that fails leaves the row untouched and the
+  // next run retries it, while a successful send can never fire twice.
+  preMoveReminderCount: integer("pre_move_reminder_count").default(0).notNull(),
+  preMoveReminderSentAt: timestamp("pre_move_reminder_sent_at"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
