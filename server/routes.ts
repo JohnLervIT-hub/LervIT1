@@ -86,6 +86,7 @@ import {
   sumHandlingPremiums,
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
+import { isInServiceArea, serviceAreaApiMessage } from "@shared/serviceArea";
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
@@ -4410,6 +4411,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Move date must be at least 2 hours from now." });
       }
 
+      // SERVICE AREA: this is the gate. The booking form runs the same check so
+      // the customer sees it at step 1, but that is UX only — anything posted
+      // here has to be re-checked, including addresses that never went through
+      // the form.
+      for (const address of [bookingData.pickupAddress, bookingData.dropoffAddress]) {
+        if (!isInServiceArea(address)) {
+          return res.status(400).json({
+            error: "Service area",
+            message: serviceAreaApiMessage(address),
+          });
+        }
+      }
+
       // Extract and validate preSelectedMoverId for later use (after payment)
       let validatedPreSelectedMoverId: string | null = null;
       if (bookingData.preSelectedMoverId) {
@@ -6138,6 +6152,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Only allow editing pending or pending_payment bookings
       if (!['pending', 'pending_payment'].includes(existingBooking.status)) {
         return res.status(400).json({ error: "Can only edit bookings with pending status" });
+      }
+      
+      // SERVICE AREA: same gate as POST, so an edit cannot move an in-area
+      // booking out of the zone. Only the addresses actually being changed are
+      // checked — an existing booking keeps whatever it was created with.
+      for (const address of [updates.pickupAddress, updates.dropoffAddress]) {
+        if (address !== undefined && !isInServiceArea(address)) {
+          return res.status(400).json({
+            error: "Service area",
+            message: serviceAreaApiMessage(address),
+          });
+        }
       }
       
       // Build update data

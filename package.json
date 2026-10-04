@@ -14,7 +14,8 @@
     "generate:dims": "tsx scripts/generate-reference-dims.ts --write",
     "load-test": "k6 run tests/load/k6-booking-flow.js",
     "test:e2e": "playwright test",
-    "test:match": "tsx scripts/test-furniture-match.ts"
+    "test:match": "tsx scripts/test-furniture-match.ts",
+    "test:service-area": "tsx scripts/test-service-area.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

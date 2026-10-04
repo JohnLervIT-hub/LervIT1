@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput, cleanAddress } from "@/components/CustomAddressInput";
+import { isInServiceArea, serviceAreaFieldMessage } from "@shared/serviceArea";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
@@ -1775,6 +1776,13 @@ export default function RequestMove() {
     });
   };
 
+  // Only judge an address once Google has resolved it — `*Coords` is set from
+  // place.geometry, so this stays quiet while someone is still typing and only
+  // speaks up about an address they actually picked. A typed-but-unconfirmed
+  // address is already blocked below by the missing-coords check.
+  const pickupOutsideArea = !!pickupCoords && !isInServiceArea(pickupAddress);
+  const dropoffOutsideArea = !!dropoffCoords && !isInServiceArea(dropoffAddress);
+
   const handleNext = () => {
     // Step 1: Validate addresses (MANDATORY)
     if (step === 1) {
@@ -1811,6 +1819,18 @@ export default function RequestMove() {
           description: dropoffAddress.trim()
             ? "Please reselect your dropoff address from the dropdown suggestions"
             : "Please enter and select a dropoff address",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Service area. The API enforces this too; stopping here saves the
+      // round trip and keeps the message next to the field that caused it.
+      if (pickupOutsideArea || dropoffOutsideArea) {
+        toast({
+          title: "Outside our service area",
+          description: serviceAreaFieldMessage(
+            pickupOutsideArea ? pickupAddress : dropoffAddress,
+          ),
           variant: "destructive",
         });
         return;
@@ -2497,6 +2517,15 @@ export default function RequestMove() {
                             Reselect from dropdown to confirm address
                           </p>
                         )}
+                        {pickupOutsideArea && (
+                          <p
+                            className="text-xs text-destructive mt-1 flex items-start gap-1"
+                            data-testid="pickup-service-area-error"
+                          >
+                            <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                            <span>{serviceAreaFieldMessage(pickupAddress)}</span>
+                          </p>
+                        )}
                         <Select value={pickupDifficulty} onValueChange={(val) => { setPickupDifficulty(val); setPickupAccessError(false); }}>
                           <SelectTrigger
                             id="pickup-difficulty"
@@ -2554,6 +2583,15 @@ export default function RequestMove() {
                           >
                             <AlertCircle className="w-3 h-3" />
                             Reselect from dropdown to confirm address
+                          </p>
+                        )}
+                        {dropoffOutsideArea && (
+                          <p
+                            className="text-xs text-destructive mt-1 flex items-start gap-1"
+                            data-testid="dropoff-service-area-error"
+                          >
+                            <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                            <span>{serviceAreaFieldMessage(dropoffAddress)}</span>
                           </p>
                         )}
                         <Select value={dropoffDifficulty} onValueChange={(val) => { setDropoffDifficulty(val); setDropoffAccessError(false); }}>
@@ -3139,6 +3177,7 @@ export default function RequestMove() {
                     </Button>
                     <Button
                       onClick={handleNext}
+                      disabled={pickupOutsideArea || dropoffOutsideArea}
                       data-testid="button-next"
                     >
                       Next
