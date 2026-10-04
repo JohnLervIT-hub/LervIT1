@@ -18,7 +18,6 @@ export interface PriceBreakdown {
   subtotal: number;
   total: number;
   vehicleClass: VehicleClass;
-  adjustedVolume: number;
   rawVolume: number;
   numberOfMovers: number;
   forcedTwoMovers: boolean;
@@ -67,12 +66,6 @@ export const PRICING_CONFIG = {
 
   // Volume rate (raw volume × rate)
   volumeRate: 0.35,
-
-  // Packing factor — vehicle matching ONLY (not used in price calculation).
-  // Item-level volumes in the furniture DB already include bounding-box air
-  // around irregular shapes, so this only adds the ~10% headroom needed for
-  // load gaps when items are stacked.
-  packingFactor: 1.10,
 
   // 2-mover addition (30% of subtotal)
   twoMoverAddition: 0.30,
@@ -167,25 +160,26 @@ export const LOAD_SIZE_CEILING_TIER = 'apartment';
 /**
  * Class boundaries in RAW ft³ — the same unit the Recommendations card shows.
  *
- * Published ranges: SUV 0-54, Pickup 55-136, Cargo Van 137-260, Truck 261+.
+ * Published ranges: SUV 0-20, Pickup 21-130, Cargo Van 131-260, Truck 261+.
  *
- * These are the raw equivalents of the adjusted 60/150/286 the classifier used
- * to compute inline (raw × packingFactor 1.10). Stating them raw removes the
- * conversion: the card showed raw volume beside a range quoted in adjusted ft³,
- * so a 136.2 ft³ load read as a Pickup while classing as a Cargo Van. The van
- * ceiling of 260 raw is unchanged — 260 × 1.10 is exactly 286.
+ * Raw means raw: the volume is compared against these directly. There is no
+ * packing factor and no multiplication anywhere in the classification path.
+ * The factor used to be applied inside the classifier while the card displayed
+ * raw ft³, so a load could read as one class and charge as another; it is gone
+ * rather than merely bypassed.
+ *
+ * The SUV ceiling is the sharp one — 20 ft³ is roughly a single armchair plus a
+ * couple of boxes. Anything above it quotes as a pickup at $30 base + $1.80/km
+ * instead of $20 + $0.80/km.
  *
  * VEHICLE_CLASSES and VEHICLE_CAPACITY_RANGES derive from this object rather
- * than restating it, which is how the three sets drifted apart before.
+ * than restating it, which is how the sets drifted apart before.
  * VEHICLE_VOLUME_THRESHOLDS in shared/furniture-database.ts mirrors it by hand
  * (that file cannot import this one without a cycle) — change both together.
- *
- * packingFactor survives for `adjustedVolume`, which is reported for display
- * only and no longer gates anything.
  */
 export const VEHICLE_CLASS_MAX_RAW_FT3 = {
-  A: 54,
-  B: 136,
+  A: 20,
+  B: 130,
   C: 260,
 } as const;
 
@@ -243,8 +237,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
 /**
  * Determine vehicle class from raw volume — the raw sum of item volumes, with
  * no adjustment applied.
- *   raw ≤ 54   → A  (SUV)
- *   raw ≤ 136  → B  (Pickup Truck)
+ *   raw ≤ 20   → A  (SUV)
+ *   raw ≤ 130  → B  (Pickup Truck)
  *   raw ≤ 260  → C  (Cargo Van)
  *   raw > 260  → E  (Moving Truck)
  */
@@ -356,7 +350,7 @@ export function vehicleTypeFromClass(vehicleClass: VehicleClass): string {
 export const VEHICLE_CAPACITY_RANGES = {
   A: { min: 0,
        max: VEHICLE_CLASS_MAX_RAW_FT3.A,
-       typical: 25  },
+       typical: 12  },
   B: { min: VEHICLE_CLASS_MAX_RAW_FT3.A + 1,
        max: VEHICLE_CLASS_MAX_RAW_FT3.B,
        typical: 80  },
@@ -414,8 +408,8 @@ export function getAllVehicleClasses(): VehicleClassConfig[] {
  *
  * Steps:
  *  1. Raw volume — AI-detected `volumeCuft` if present, else map `loadSize` → volume.
- *  2. Adjusted volume — raw × packingFactor (for vehicle matching only).
- *  3. Vehicle class — from raw volume via getVehicleClassFromVolume.
+ *  2. Vehicle class — from raw volume via getVehicleClassFromVolumeAndLength,
+ *     so a long-but-light item (mattress, large TV) cannot class as an SUV.
  *  4a. Item premiums — sum from detectedItems[].premiumKey, or legacy heavyItem fallback.
  *  4b. Force 2 movers when rawVolume > threshold OR any always-heavy premium key present.
  *  5–7. Base + distance + load fees.
@@ -459,10 +453,7 @@ export function calculatePrice({
     ? 'detected'
     : loadSizeVolume != null ? 'load_size_fallback' : 'default';
 
-  // STEP 2 — Adjusted volume. Display only: the classifier works in raw ft³.
-  const adjustedVolume = rawVolume * cfg.packingFactor;
-
-  // STEP 3 — Vehicle class (volume, with the longest-side floor)
+  // STEP 2 — Vehicle class (volume, with the longest-side floor)
   const vehicleClass = getVehicleClassFromVolumeAndLength(rawVolume, maxLengthCm);
 
   // STEP 4a — Item premiums (needed before force-2-movers so heavy items count).
@@ -536,7 +527,6 @@ export function calculatePrice({
     subtotal: round2(subtotal),
     total: round2(total),
     vehicleClass,
-    adjustedVolume: round2(adjustedVolume),
     rawVolume: round2(rawVolume),
     numberOfMovers: effectiveMovers,
     forcedTwoMovers,
@@ -722,7 +712,6 @@ export function getPricingConfig() {
     vehicleBaseFees: PRICING_CONFIG.vehicleBaseFees,
     kmRates: PRICING_CONFIG.kmRates,
     volumeRate: PRICING_CONFIG.volumeRate,
-    packingFactor: PRICING_CONFIG.packingFactor,
     twoMoverAddition: PRICING_CONFIG.twoMoverAddition,
     forceTwoMoversRawVolumeThreshold: PRICING_CONFIG.forceTwoMoversRawVolumeThreshold,
     forceTwoMoversHeavyKeys: PRICING_CONFIG.forceTwoMoversHeavyKeys,

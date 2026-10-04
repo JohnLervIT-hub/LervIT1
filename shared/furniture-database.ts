@@ -2105,20 +2105,20 @@ export function findBestMatch(itemName: string, volumeHint?: number): { item: Fu
  * ===== VEHICLE SELECTION THRESHOLDS =====
  * Single source of truth for volume-to-vehicle mapping
  * 
- * Raw ft³ boundaries. Hand-mirrored from VEHICLE_CLASS_MAX_RAW_FT3 in
- * shared/pricing.ts — this file cannot import that one without a cycle, so the
- * two must be changed together:
- *   ≤54 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes  [Class A]
- *   ≤136 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
+ * Raw ft³ boundaries, compared directly — no packing factor, no multiplication.
+ * Hand-mirrored from VEHICLE_CLASS_MAX_RAW_FT3 in shared/pricing.ts; this file
+ * cannot import that one without a cycle, so the two must be changed together:
+ *   ≤20 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes  [Class A]
+ *   ≤130 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
  *   ≤260 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
  *   >260 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
  *
- * These comments previously quoted 318 against a constant of 260, which is how
- * the two drifted unnoticed. Read the constant, and fix both together.
+ * These comments once quoted 318 against a constant of 260, which is how the
+ * two drifted unnoticed. Read the constant, and fix both together.
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
-  CAR_MAX: 54,       // raw ≤ 54 ft³   → Class A (SUV)
-  PICKUP_MAX: 136,   // raw ≤ 136 ft³  → Class B (Pickup Truck)
+  CAR_MAX: 20,       // raw ≤ 20 ft³   → Class A (SUV)
+  PICKUP_MAX: 130,   // raw ≤ 130 ft³  → Class B (Pickup Truck)
   VAN_MAX: 260,      // raw ≤ 260 ft³  → Class C (Cargo Van)
   // Above 260 ft³ → Class E (Moving Truck)
 };
