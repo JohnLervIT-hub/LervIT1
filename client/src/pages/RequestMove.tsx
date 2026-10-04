@@ -1642,10 +1642,10 @@ export default function RequestMove() {
 
         // Same call the server and calculatePrice make, so the vehicle on the
         // card is the vehicle in the price. There used to be a tier ladder here
-        // with its own volume thresholds, weight bumps and a >200cm rule that
-        // lifted B->C; it showed Cargo Van on a 103.6 ft3 sectional while the
-        // customer was billed Pickup. The length floors live in
-        // getVehicleClassFromVolumeAndLength now.
+        // with its own volume thresholds, weight bumps and a >200cm rule; it
+        // showed Cargo Van on a 103.6 ft3 sectional while the customer was
+        // billed Pickup. Vehicle selection lives in
+        // getVehicleClassFromVolumeAndLength now — do not re-derive it here.
         const recommendedVehicle = vehicleTypeFromClass(
           getVehicleClassFromVolumeAndLength(totalVolume, maxLengthCm(completedAll)),
         );

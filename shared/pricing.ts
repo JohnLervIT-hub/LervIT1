@@ -256,44 +256,35 @@ export function getVehicleClassFromVolume(rawVolumeCuft: number): VehicleClass {
  *
  * Volume alone cannot see length: a 203cm king mattress is 34.6 raw ft³ and a
  * 219cm 98-inch TV is 3.9, so both class as A on volume while fitting in no
- * SUV.
+ * SUV. This floor only ever lifts A → B.
  */
 export const LENGTH_FLOOR_CM = 150;
 
 /**
- * Longest-side length, in cm, past which a load stops being a pickup job.
- *
- * A standard pickup bed is about 198cm, so anything longer rides with the
- * tailgate down or does not ride at all — it needs the enclosed length of a
- * cargo van. A 230cm small L-sectional is 103.6 raw ft³, comfortably inside
- * the 130 ft³ pickup band on volume alone, and does not fit a pickup.
- */
-export const LENGTH_VAN_FLOOR_CM = 200;
-
-/**
- * Vehicle class from raw volume, with the longest-side floors applied.
+ * Vehicle class from raw volume, with the longest-side floor applied.
  *
  * This is the canonical mapping for anything customer-facing: calculatePrice,
  * the booking flow's recommendation card and the vision engine all call it, so
  * the displayed vehicle and the charged class cannot drift apart.
  *
- * Two lifts, applied in order, so a single very long item in a tiny load walks
- * A → B → C:
- *   > LENGTH_FLOOR_CM (150)      A → B   longer than an SUV can take
- *   > LENGTH_VAN_FLOOR_CM (200)  B → C   longer than a pickup bed
+ * Volume is the sole determinant from B upward. The one length floor only ever
+ * lifts A → B: it never touches B, C or E, so a long item inside the pickup
+ * band stays a pickup however long it is. Weight never enters vehicle
+ * selection at all.
  *
- * Neither lift touches C or E — volume stays decisive for every larger load,
- * and weight never enters vehicle selection at all.
+ * A B → C lift at 200cm was added and reverted (479f79b, then this). It is a
+ * deliberate policy choice, not an oversight — raising it again means deciding
+ * that a 230cm sectional inside the 130 ft³ pickup band should bill as a van.
  */
 export function getVehicleClassFromVolumeAndLength(
   rawVolumeCuft: number,
   maxLengthCm?: number | null,
 ): VehicleClass {
-  let vehicleClass = getVehicleClassFromVolume(rawVolumeCuft);
-  if (typeof maxLengthCm !== 'number') return vehicleClass;
-  if (vehicleClass === 'A' && maxLengthCm > LENGTH_FLOOR_CM) vehicleClass = 'B';
-  if (vehicleClass === 'B' && maxLengthCm > LENGTH_VAN_FLOOR_CM) vehicleClass = 'C';
-  return vehicleClass;
+  const volumeClass = getVehicleClassFromVolume(rawVolumeCuft);
+  if (volumeClass === 'A' && typeof maxLengthCm === 'number' && maxLengthCm > LENGTH_FLOOR_CM) {
+    return 'B';
+  }
+  return volumeClass;
 }
 
 /** Map manual load size → vehicle class via the volume estimate. */
