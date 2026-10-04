@@ -79,9 +79,9 @@ SOFAS:
 • Twin sofa bed (loveseat sleeper, pull-out twin): ~170×90×85cm, 55kg
 • Full/Double sofa bed (3-seat sleeper, pull-out double): ~200×95×85cm, 75kg
 • Queen sofa bed (large sleeper, pull-out queen): ~230×100×90cm, 95kg
-• Small sectional sofa bed (2-piece L-shaped with pull-out sleeper): ~228×151×66cm, 110kg
-• Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage): ~240×160×83cm, 145kg
-• Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage): ~270×200×85cm, 180kg
+• Small sectional sofa bed (2-piece L-shaped with pull-out sleeper): ~250×170×85cm, 110kg
+• Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage): ~290×200×90cm, 145kg
+• Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage): ~340×220×90cm, 180kg
 
 TABLES:
 • Dining table (4-person): ~120×75×75cm, 35kg
