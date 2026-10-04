@@ -289,6 +289,51 @@ export function registerAgentSubscriptions(): void {
     'Kai Bennett',
   );
 
+  // Booking cancelled → Alex sends the win-back email now, and self-enqueues
+  // the SMS half 48h out.
+  //
+  // `cancellation_recovery` has existed in alex.ts since the agent was written
+  // — reason-keyed copy, a delayed SMS, an emitted follow-up event — and
+  // nothing ever called it. This is that call.
+  //
+  // Guarded on `reason`: booking.cancelled is also emitted by DELETE
+  // /api/bookings/:id with reason 'customer_deleted', which removes the booking
+  // row immediately afterwards. Alex loads the booking by id, so running there
+  // would race the delete and fail. A deleted booking is not a cancellation to
+  // win back.
+  agentEventBus.subscribe(
+    'booking.cancelled',
+    async (data) => {
+      if (data.reason === 'customer_deleted') {
+        logger.info(
+          { bookingId: data.bookingId },
+          '[EventBus] cancelled→alex skipped — booking is being deleted',
+        );
+        return;
+      }
+
+      logger.info(
+        { bookingId: data.bookingId, customerId: data.customerId },
+        '[EventBus] cancelled→alex',
+      );
+
+      await alex
+        .run(
+          'cancellation_recovery',
+          {
+            bookingId: data.bookingId,
+            cancellationReason: data.cancellationReason ?? null,
+            cancellationComments: data.cancellationComments ?? null,
+          },
+          { dryRun: false },
+        )
+        .catch((err) =>
+          logger.error({ err }, '[EventBus] alex cancellation recovery failed'),
+        );
+    },
+    'Alex Morgan',
+  );
+
   // ═══════════════════════════════
   // LEAD CHAIN
   // ═══════════════════════════════

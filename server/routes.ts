@@ -6018,9 +6018,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         delete (updates as any).cancellationAnswers;
       }
 
+      // Read before the write: `booking` below is the updated row, so its
+      // status is already 'cancelled' by the time the emit runs.
+      const previousStatusForCancel = updates.status === BOOKING_STATUSES.CANCELLED
+        ? (await storage.getBooking(req.params.id))?.status ?? null
+        : null;
+
       const booking = await storage.updateBooking(req.params.id, updates as any);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // The real customer cancellation. This path logged
+      // customer_cancellation_reason but emitted nothing, so the only
+      // booking.cancelled on the bus came from DELETE /api/bookings/:id — a
+      // path that destroys the row. Alex's cancellation_recovery therefore sat
+      // unreachable. Emitted after the write so a subscriber loading the
+      // booking sees the cancelled row and its reason.
+      if (updates.status === BOOKING_STATUSES.CANCELLED) {
+        await emitEvent('booking.cancelled', 'booking', booking.id, {
+          customerId: booking.customerId,
+          previousStatus: previousStatusForCancel,
+          moverId: booking.moverId ?? null,
+          cancellationReason: booking.cancellationReason ?? null,
+          cancellationComments: booking.cancellationAnswers ?? null,
+          reason: 'customer_cancelled',
+        });
+
+        // Two emits, as booking.completed does: emitEvent only inserts a
+        // business_events row, while agentEventBus is what the subscriptions in
+        // agents/subscriptions.ts are listening on. Only this second call
+        // reaches Alex.
+        await agentEventBus.emit(
+          'booking.cancelled',
+          {
+            bookingId: booking.id,
+            customerId: booking.customerId,
+            moverId: booking.moverId ?? null,
+            cancellationReason: booking.cancellationReason ?? null,
+            cancellationComments: booking.cancellationAnswers ?? null,
+            reason: 'customer_cancelled',
+          },
+          'system',
+        );
       }
 
       // Availability holds — this handler is both a legacy direct-acceptance
@@ -17221,6 +17261,23 @@ Respond with VALID JSON only:
           bookingId ? { bookingId: String(bookingId) } : {},
           { dryRun },
         );
+        return res.json({ ok: true, action, dryRun, result });
+      }
+      // Manual trigger for the cancellation win-back, so it can be exercised
+      // against a real booking without waiting for someone to cancel. Both
+      // halves are exposed: the email, and the 48h SMS that normally
+      // self-enqueues behind it.
+      if (action === 'cancellation_recovery' || action === 'cancellation_recovery_sms') {
+        const bookingId = req.body?.bookingId ?? req.body?.input?.bookingId;
+        if (!bookingId) return res.status(400).json({ error: 'bookingId required' });
+        const input: Record<string, unknown> = { bookingId: String(bookingId) };
+        if (action === 'cancellation_recovery') {
+          const reason = req.body?.cancellationReason ?? req.body?.input?.cancellationReason;
+          const comments = req.body?.cancellationComments ?? req.body?.input?.cancellationComments;
+          if (reason !== undefined) input.cancellationReason = reason;
+          if (comments !== undefined) input.cancellationComments = comments;
+        }
+        const result = await alex.run(action, input, { dryRun });
         return res.json({ ok: true, action, dryRun, result });
       }
       return res.status(400).json({ error: `Unsupported action: ${action}` });
