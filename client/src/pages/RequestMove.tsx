@@ -15,12 +15,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput, cleanAddress } from "@/components/CustomAddressInput";
 import { isInServiceArea, serviceAreaFieldMessage } from "@shared/serviceArea";
 import { PricingSummary } from "@/components/PricingSummary";
-import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
+import { DetectedItemsSummary } from "@/components/DetectedItemsSummary";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2, Phone } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
@@ -1800,30 +1799,10 @@ export default function RequestMove() {
     setImages(newUrls);
   };
 
-  // Called by IdentifiedItemsList when the user corrects an item. Patches the
-  // item in place and re-runs the same recalculation the removal path uses, so
-  // load size, mover count, vehicle class and the live price all follow the
-  // correction immediately.
-  const handleUpdateItem = (photoUrl: string, patch: Partial<IdentifiedItem>) => {
-    const next = identifiedItemsRef.current.map(item =>
-      item.photoUrl === photoUrl ? { ...item, ...patch } : item
-    );
-    identifiedItemsRef.current = next;
-    setIdentifiedItems(next);
-    recalcFromItems(next);
-  };
-
-  // Called by IdentifiedItemsList when the user taps the X on an item row
-  const handleRemoveItem = (photoUrl: string) => {
-    analyzedUrlsRef.current.delete(photoUrl);
-    const filtered = identifiedItemsRef.current.filter(item => item.photoUrl !== photoUrl);
-    identifiedItemsRef.current = filtered;
-    setIdentifiedItems(filtered);
-    // Recalculate pricing state immediately from the new item list
-    recalcFromItems(filtered);
-    // Also remove the photo from the upload grid
-    setImages(prev => prev.filter(url => url !== photoUrl));
-  };
+  // handleUpdateItem / handleRemoveItem removed with the editable item list:
+  // per-row edits and deletes were customer-controlled price inputs. Removing a
+  // photo from the upload grid still drops its item — handleImagesChange above
+  // does that cleanup, so nothing is lost.
 
   // Apply AI recommendations to booking form
   const handleApplyAIRecommendations = () => {
@@ -2889,14 +2868,15 @@ export default function RequestMove() {
                         </div>
                       )}
                       
-                      {/* Show results after analysis completes */}
+                      {/* Read-only: the measured volume IS the quote, so the
+                          customer no longer edits quantities or sizes here. */}
                       {!isIdentifyingItems && identifiedItems.length > 0 && (
                         <div className="mt-4">
-                          <IdentifiedItemsList
+                          <DetectedItemsSummary
                             items={identifiedItems}
-                            isLoading={false}
-                            onRemoveItem={handleRemoveItem}
-                            onUpdateItem={handleUpdateItem}
+                            vehicle={aiRecommendedVehicle}
+                            movers={numberOfMovers}
+                            totalVolume={aiDetectedVolume}
                           />
                         </div>
                       )}
@@ -2905,22 +2885,14 @@ export default function RequestMove() {
                     {/* Load details - show manual selection only when AI hasn't detected items */}
                     {!isIdentifyingItems && (
                       <>
-                        {/* Only show load size selector if AI hasn't recommended one */}
-                        {identifiedItems.length === 0 && (
-                          <div>
-                            <Label className="text-base font-semibold mb-4 block">
-                              Select Load Size
-                            </Label>
-                            <LoadSizeSelector
-                              selectedSize={loadSize}
-                              onSelectSize={(size) => {
-                                setLoadSize(size);
-                                setAiDetectedVolume(undefined);
-                              }}
-                            />
-                          </div>
-                        )}
-                        
+                        {/*
+                          Load size is no longer customer-selectable: volume comes
+                          from the vision engine. `loadSize` stays in state as the
+                          pre-photo fallback for calculatePrice (and is still sent
+                          with the booking), it just isn't rendered — a customer
+                          picking "medium" was choosing a price input by guessing
+                          at a number they had no way to estimate.
+                        */}
                         {/* Show heavy items toggle only when AI hasn't detected items */}
                         {identifiedItems.length === 0 && (
                           <div className="border-t pt-6">
