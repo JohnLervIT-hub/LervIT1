@@ -224,6 +224,12 @@ export interface VisionEngineResult {
   insurance_level: 'standard' | 'medium' | 'high' | 'premium';
   confidence: number;
   source: 'database_match' | 'vision_estimate' | 'fallback';
+  /**
+   * Set only when `source` is 'fallback': why the real analysis failed (429,
+   * timeout, malformed JSON...). Callers must not price a fallback item — the
+   * dimensions on it are a generic placeholder, not a measurement.
+   */
+  fallbackReason?: string;
   matchedItem?: string;  // Database item ID if matched
   corrections?: string[];  // Any corrections applied
   processingTime: number;
@@ -1141,6 +1147,16 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     return result;
     
   } catch (error: any) {
+    // A deliberate rejection, not a failure: the photo does not show an
+    // identifiable item and the customer must replace it. The route's
+    // Promise.allSettled branch turns this into needsReplacement, which it
+    // could never do while this catch swallowed the throw and handed back a
+    // plausible-looking "Unidentified Item" instead.
+    if (error?.code === 'FULL_SCENE_REJECTED' || error?.message === 'FULL_SCENE_REJECTED') {
+      console.log('[Vision Engine 2.0] Re-throwing scene rejection for:', photoUrl.slice(-40));
+      throw error;
+    }
+
     logEvent.error('vision_engine', error, { photoUrl });
     
     // Return fallback result
@@ -1167,6 +1183,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       insurance_level: 'standard',
       confidence: 0,
       source: 'fallback',
+      fallbackReason: error?.message ? String(error.message).slice(0, 200) : 'unknown',
       processingTime: Date.now() - startTime,
     };
   }

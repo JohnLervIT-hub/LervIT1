@@ -11550,7 +11550,13 @@ Respond with VALID JSON only:
           // Convert to legacy format for backward compatibility
           const result = toIdentificationResult(v2Result);
           console.log(`[Vision Engine 2.0] Completed photo ${i + 1}: ${result.itemName} (${v2Result.source})`);
-          return { photoUrl, result, index: i };
+          return {
+            photoUrl,
+            result,
+            index: i,
+            source: v2Result.source,
+            fallbackReason: v2Result.fallbackReason,
+          };
         })
       );
       
@@ -11563,8 +11569,41 @@ Respond with VALID JSON only:
       
       for (const settled of results) {
         if (settled.status === 'fulfilled') {
-          const { photoUrl, result, index } = settled.value;
-          
+          const { photoUrl, result, index, source, fallbackReason } = settled.value;
+
+          // A 'fallback' result is not a measurement. identifyItemV2 catches
+          // 429s, timeouts and malformed JSON and returns a complete-looking
+          // item built from getTypicalDimensions('Other') — if that is stored
+          // and summed, a transient OpenAI blip silently becomes the
+          // customer's quoted volume. Treat it as a failed photo: no row, no
+          // volume, and a log line so the blip is visible in Railway.
+          if (source === 'fallback') {
+            logEvent.error('vision_fallback_used', new Error(fallbackReason || 'unknown'), {
+              vision_fallback_used: true,
+              photoUrl,
+              reason: fallbackReason || 'unknown',
+              bookingId: bookingId ?? null,
+            });
+            console.warn(`[Vision Engine 2.0] Fallback result discarded for ${photoUrl?.substring(0, 80)}: ${fallbackReason || 'unknown'}`);
+            items.push({
+              id: `temp-${index}`,
+              photoUrl,
+              processingStatus: 'failed',
+              errorMessage: "We couldn't analyse this photo just now. Please try again in a moment.",
+              // The photo is fine — our analysis failed — so this is not a
+              // request for a different picture.
+              needsReplacement: false,
+            });
+            errors.push({
+              photoUrl,
+              error: 'VISION_FALLBACK',
+              reason: fallbackReason || 'unknown',
+              needsReplacement: false,
+              retryable: true,
+            });
+            continue;
+          }
+
           if (bookingId) {
             const identifiedItem = await storage.createIdentifiedItem({
               bookingId,
