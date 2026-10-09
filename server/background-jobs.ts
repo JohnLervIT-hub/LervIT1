@@ -17,7 +17,7 @@ import { kai } from './agents/kai';
 import { sam } from './agents/sam';
 import { riley } from './agents/riley';
 import { aegis } from './agents/aegis';
-import { ember } from './agents/ember';
+import { ember, fetchExternalSignals, pickTrendTopic } from './agents/ember';
 import { reid } from './agents/reid';
 import { nova } from './agents/nova';
 import { gt } from 'drizzle-orm';
@@ -445,6 +445,42 @@ export function initBackgroundJobs() {
         }
       }
       logger.info({ event: 'ember_social_content' }, 'Ember social sweep complete');
+    });
+  }, TZ);
+
+  // Sunday — next week's campaign, themed on what Calgary is actually searching.
+  // fetchExternalSignals is the cached, never-rejecting Trends read (1h success /
+  // 10min failure), and pickTrendTopic screens price-shaped queries so a single
+  // "cheap movers" week doesn't turn the whole campaign into discount copy.
+  // Falls back to the season angle when Trends is unreachable.
+  cron.schedule('0 7 * * 0', async () => {
+    await withJobLock('ember_weekly_campaign', async () => {
+      try {
+        const signals = await fetchExternalSignals();
+        const trendTopic = pickTrendTopic(signals?.trendingTerms) ?? 'Calgary moving season';
+
+        const weekLabel = new Date().toLocaleDateString('en-CA', {
+          month: 'short',
+          day: 'numeric',
+          timeZone: 'America/Edmonton',
+        });
+
+        const result = await ember.run('create_campaign', {
+          name: `Week of ${weekLabel} — ${trendTopic}`,
+          objective: 'Brand awareness and lead generation for Calgary movers',
+          audience: 'Calgary residents planning a move in the next 30 days',
+          offer: 'LERVIT10',
+          platforms: ['instagram', 'facebook', 'linkedin'],
+          durationDays: 7,
+        });
+
+        logger.info(
+          { event: 'ember_weekly_campaign', trend: trendTopic, result },
+          'Ember weekly campaign created',
+        );
+      } catch (err) {
+        logger.error({ err, event: 'ember_weekly_campaign' }, 'Ember weekly campaign failed');
+      }
     });
   }, TZ);
 

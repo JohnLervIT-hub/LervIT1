@@ -363,6 +363,53 @@ const BROWSER_HEADERS = {
 /** Terms in a rising query that mean the market is shopping on price. */
 const PRICE_INTENT_TERMS = ['price', 'cost', 'cheap', 'affordable'];
 
+/**
+ * Where blog images are served from. The files live in the marketing site repo
+ * (website-standalonezip/public/assets) and 404 on the app host, so a relative
+ * path only resolves for a reader already on lervit.com. Matches the env
+ * convention in nova-webhook-routes.ts.
+ */
+export const MARKETING_SITE_URL = (process.env.MARKETING_SITE_URL ?? 'https://lervit.com').trim();
+
+/**
+ * HeyGen subscription state. False blocks generateHeygenVideo and keeps
+ * heygen_video out of auto-generated campaign plans; Higgsfield is the only
+ * video generator while this is false.
+ */
+const HEYGEN_SUBSCRIPTION_ACTIVE = false;
+
+/** Stray heygen plan items become Higgsfield renders while HeyGen is off. */
+function normalizeItemType(type: string): string {
+  if (!HEYGEN_SUBSCRIPTION_ACTIVE && type === 'heygen_video') return 'higgsfield_video';
+  return type;
+}
+
+function normalizeItemGenerator(generator: string | null): string | null {
+  if (!HEYGEN_SUBSCRIPTION_ACTIVE && generator === 'heygen') return 'higgsfield';
+  return generator;
+}
+
+/**
+ * Pick the rising query worth writing a post about.
+ *
+ * Price-shaped terms are skipped: they score the price_anchor angle in
+ * selectCreativeAngle, which is the right use for them, but as a content topic
+ * they turn the whole week's feed into discount copy on one odd week of Trends
+ * data. Returns null when every term is price-shaped, which leaves the caller
+ * on its generic angle.
+ */
+export function pickTrendTopic(terms: string[] | undefined | null): string | null {
+  if (!Array.isArray(terms)) return null;
+  for (const term of terms) {
+    const trimmed = term?.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (PRICE_INTENT_TERMS.some((needle) => lower.includes(needle))) continue;
+    return trimmed;
+  }
+  return null;
+}
+
 /** Style words worth forwarding to a text-to-video prompt. */
 const PROMPT_STYLE_KEYWORDS = new Set([
   'cinematic', 'dramatic', 'golden', 'aerial', 'moody', 'vibrant', 'minimal',
@@ -1477,8 +1524,11 @@ Category: ${category}.`;
         topCta,
         bottomCta,
         related: [],
-        // Placeholder — admin swaps for a real image during review.
-        image: '/assets/stock_images/person_packing_boxes_8b2535c7.jpg',
+        // Placeholder — admin swaps for a real image during review. Absolute:
+        // the asset is served by the marketing site, and consumers of
+        // /api/blog (emails, the app, partners) have no lervit.com origin to
+        // resolve a relative path against. Backfill: migrations/0043.
+        image: `${MARKETING_SITE_URL}/assets/stock_images/person_packing_boxes_8b2535c7.jpg`,
         readTime,
       })
       .returning();
@@ -1898,9 +1948,45 @@ Start your response with { directly.
       return { dryRun: true, would: 'generate_social_content', platforms, topic, tone, cta };
     }
 
+    // No explicit topic means the weekly cron: ground the post in what Calgary is
+    // actually searching instead of the generic angle. fetchExternalSignals is the
+    // cached, never-rejecting read buildCreativeStrategy already uses (1h on
+    // success, 10min on failure), so a Trends 429 just leaves this null and the
+    // generic angle stands, and four platform runs share one fetch.
+    // Sanitised like any other external string — the term is scraped off Trends,
+    // so it reaches the prompt as untrusted input.
+    let trendTopic: string | null = null;
+    if (!topic) {
+      const signals = await fetchExternalSignals();
+      const term = pickTrendTopic(signals?.trendingTerms);
+      if (term) {
+        trendTopic = sanitizeForPrompt(term, 'title');
+        logger.info({ term: trendTopic }, '[Ember] social topic grounded in Trends');
+      }
+    }
+
     const results: Array<{ id: string; platform: SocialPlatform; contentPreview: string }> = [];
 
     for (const platform of platforms) {
+      // Don't stack a second unreviewed draft on the same platform. The weekly
+      // cron is Friday-only, so a hit here means a re-run, a manual admin
+      // trigger, or an event subscription firing on top of it. Checked before
+      // generating rather than before inserting — nothing in the condition
+      // depends on the copy, so an Anthropic call first would be wasted spend.
+      const recent = await db
+        .select({ id: socialPosts.id })
+        .from(socialPosts)
+        .where(and(
+          eq(socialPosts.platform, platform),
+          eq(socialPosts.status, 'draft'),
+          gte(socialPosts.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+        ))
+        .limit(1);
+      if (recent.length > 0) {
+        logger.info({ platform }, '[Ember] skipping duplicate — draft already exists');
+        continue;
+      }
+
       const systemPrompt = `You are Ember Lane, social lead for LervIT.
 Write a ${platform} post following these rules:
 
@@ -1917,7 +2003,10 @@ Start your response with { directly.
 
       const userMessage = topic
         ? `Draft the ${platform} post. Topic: ${topic}.`
-        : `Draft today's ${platform} post. Angle: helpful moving content that lands with a Calgary audience.`;
+        : trendTopic
+          ? `Draft today's ${platform} post. Calgarians are searching for "${trendTopic}" ` +
+            `right now — write something that speaks to that intent, for a Calgary audience.`
+          : `Draft today's ${platform} post. Angle: helpful moving content that lands with a Calgary audience.`;
 
       const raw = await this.callAnthropic(systemPrompt, userMessage, 1200);
       const parsed = this.parseJson(raw);
@@ -1938,15 +2027,19 @@ Start your response with { directly.
     }
 
     // Alert Xavier so John sees "Ember: N social posts ready for review".
-    try {
-      await xavier.run('escalate', {
-        issue: `Ember: ${results.length} social post${results.length === 1 ? '' : 's'} ready for review`,
-        severity: 'low',
-        agentName: 'Ember Lane',
-        data: { platforms: results.map((r) => r.platform), count: results.length },
-      });
-    } catch (err) {
-      logger.error({ err }, '[Ember] xavier review nudge failed');
+    // Skipped when the dedup check took every platform — there is nothing new to
+    // review, and "0 posts ready" is a worse notification than no notification.
+    if (results.length > 0) {
+      try {
+        await xavier.run('escalate', {
+          issue: `Ember: ${results.length} social post${results.length === 1 ? '' : 's'} ready for review`,
+          severity: 'low',
+          agentName: 'Ember Lane',
+          data: { platforms: results.map((r) => r.platform), count: results.length },
+        });
+      } catch (err) {
+        logger.error({ err }, '[Ember] xavier review nudge failed');
+      }
     }
 
     logger.info({ count: results.length, platforms }, '[Ember] social posts drafted');
@@ -2479,7 +2572,6 @@ Create a content plan for a LervIT marketing campaign.
 ${LERVIT_BRAND}
 
 CONTENT TYPES AVAILABLE:
-  heygen_video     — presenter/explainer with a talking avatar
   higgsfield_video — cinematic/lifestyle B-roll style
   social           — text + caption for social feed
   blog             — SEO article on lervit.com/blog
@@ -2508,13 +2600,11 @@ other fields:
       "generator": "higgsfield"
     },
     {
-      "type": "heygen_video",
+      "type": "social",
       "objective": "education",
       "platform": "facebook",
       "concept": "Max 80 chars",
-      "week": 2,
-      "aspectRatio": "16:9",
-      "generator": "heygen"
+      "week": 2
     }
   ]
 }
@@ -2617,13 +2707,18 @@ Duration: ${input.durationDays ?? 30} days
         .values(
           plan.items.map((item: any) => ({
             campaignId: campaign.id,
-            type: String(item.type ?? 'social'),
+            // The prompt no longer offers heygen_video, but a model can still
+            // emit it, and nothing downstream renders one while the
+            // subscription is inactive — it would sit in admin as a dead item.
+            type: normalizeItemType(String(item.type ?? 'social')),
             objective: item.objective ? String(item.objective) : null,
             platform: item.platform ? String(item.platform) : null,
             status: 'draft',
             creativeBrief: item,
             aspectRatio: item.aspectRatio ? String(item.aspectRatio) : null,
-            generator: item.generator ? String(item.generator) : null,
+            generator: normalizeItemGenerator(
+              item.generator ? String(item.generator) : null,
+            ),
             cta: item.cta ? String(item.cta) : null,
           })),
         )
@@ -2969,6 +3064,19 @@ Market: ${strategy.city}${strategy.area ? ` (${strategy.area})` : ''}, ${strateg
   }
 
   async generateHeygenVideo(input: GenerateHeygenVideoInput, options?: AgentRunOptions) {
+    // Subscription is lapsed, so every submit would burn a render slot and fail
+    // at the provider. Gated on a constant rather than deleting the method:
+    // flip HEYGEN_SUBSCRIPTION_ACTIVE back to true on renewal and the path
+    // below works unchanged. Returns rather than throws — the only caller is
+    // the admin action list (routes.ts), which surfaces the message.
+    if (!HEYGEN_SUBSCRIPTION_ACTIVE) {
+      logger.warn({ input }, '[Ember] HeyGen video generation blocked — subscription inactive');
+      return {
+        error: 'heygen_subscription_inactive',
+        message: 'HeyGen subscription is not active. Renew to re-enable video generation.',
+      };
+    }
+
     if (!input.contentItemId) throw new Error('generate_heygen_video: contentItemId required');
     if (options?.dryRun) return { dryRun: true, would: 'generate_heygen_video', input };
 

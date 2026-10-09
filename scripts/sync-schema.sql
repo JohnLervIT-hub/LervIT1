@@ -1767,3 +1767,11 @@ ALTER TABLE bookings
 CREATE INDEX IF NOT EXISTS bookings_pre_move_reminder_idx
   ON bookings (pre_move_reminder_count, status)
   WHERE pre_move_reminder_count = 0;
+
+-- ===== 0043: absolute blog image URLs =====
+-- Mirrors migrations/0043_blog_posts_absolute_image_urls.sql. startup-migrate.js
+-- runs only this file, never migrations/, so the backfill must be here too.
+-- Idempotent: a rewritten row starts with 'https://' and stops matching.
+UPDATE blog_posts
+   SET image = 'https://lervit.com' || image
+ WHERE image LIKE '/%';
