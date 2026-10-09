@@ -176,7 +176,9 @@ function getFirstName(fullName: string | null | undefined): string {
 
 // Normalize phone number to E.164 format (e.g., +14035551234)
 // Handles: (403) 555-1234, 403-555-1234, 4035551234, +1 403 555 1234, etc.
-function normalizeToE164(phone: string | null | undefined): string | null {
+// Exported for the lead write path: contact_phone is normalized on insert so
+// contact-level dedupe can match across formats (server/agents/shared/contactDedup).
+export function normalizeToE164(phone: string | null | undefined): string | null {
   if (!phone) return null;
   
   // Remove all non-digit characters except leading +

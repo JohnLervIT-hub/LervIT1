@@ -114,6 +114,7 @@ import {
   hasSubmittedApplication,
   APPLICATION_RECEIPT_RETRY_DELAY_MS,
 } from "./agents/jordan";
+import { canonicalPhone, findContactDuplicate } from "./agents/shared/contactDedup";
 import { documentAudits, documentIrregularities } from "@shared/schema";
 import { novaWebhookRouter } from "./nova-webhook-routes";
 import { resolveTripEta, NO_ETA } from "./lib/tripEta";
@@ -17129,31 +17130,96 @@ Respond with VALID JSON only:
         `Referral: ${referralSource || 'Not specified'}`,
       ].join('\n');
 
-      const [lead] = await db.insert(leads).values({
-        contactName: name,
-        contactEmail: email || null,
-        contactPhone: phone || null,
-        sourceChannel: 'mover_application',
-        utmSource: referralSource || 'direct',
-        utmCampaign: 'ryan-brooks',
+      // Normalized before dedupe and insert, so the same applicant's number
+      // can't land in two formats and defeat the contact match. NULL beats the
+      // raw string for an unparseable number: not textable, not matchable.
+      const contactPhone = canonicalPhone(phone);
+      if (phone && !contactPhone) {
+        logger.warn('[mover_application] unparseable phone on application — storing null');
+      }
+
+      // Re-application reuses the row rather than creating a sibling. Three of
+      // the six applicants in production already had a row under another
+      // channel (two scraped by Ryan from Kijiji, one from a quote form), so
+      // this path is routine, not an edge case.
+      const existing = await findContactDuplicate({
+        phone: contactPhone,
+        email: email || null,
         leadType: 'b2bm',
-        intentScore: 90,
-        status: 'new',
-        notes,
-        smsConsentAt: phone ? new Date() : null,
-        smsConsentText: phone
-          ? 'By submitting this form you agree to receive SMS from LervIT about mover opportunities. Reply STOP to opt out.'
-          : null,
-      }).returning({ id: leads.id });
+      });
+
+      let lead: { id: string };
+      // Carried into the receipt below. A reused row may already have touches
+      // on it (one production applicant's row sat at 4), and the receipt is an
+      // outbound touch, so it has to increment from the real value rather than
+      // reset to 1.
+      let leadTouchpoints = 0;
+      if (existing) {
+        // sourceChannel and intentScore are overwritten, not just touched.
+        // hasSubmittedApplication() keys the recruitment-drip suppression off
+        // sourceChannel, so folding an application into a kijiji_services row
+        // and leaving the channel alone would un-suppress the drip and pitch
+        // "apply to become a mover" at someone who just applied — the exact
+        // bug 'confirm_application' was added to fix.
+        //
+        // touchpoints is deliberately NOT incremented. It counts outbound
+        // touches: Jordan's drip advances it and schedule-followups.ts selects
+        // on touchpoints = 1, so bumping it on an inbound form submit would
+        // corrupt both.
+        await db
+          .update(leads)
+          .set({
+            contactName: name || undefined,
+            contactEmail: email || existing.contactEmail,
+            contactPhone: contactPhone ?? existing.contactPhone,
+            sourceChannel: 'mover_application',
+            intentScore: Math.max(existing.intentScore, 90),
+            notes: [
+              notes,
+              `--- previously ${existing.sourceChannel ?? 'unknown'} (lead reused on re-application) ---`,
+              existing.notes ?? '',
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+            updatedAt: new Date(),
+            smsConsentAt: contactPhone ? new Date() : undefined,
+            smsConsentText: contactPhone
+              ? 'By submitting this form you agree to receive SMS from LervIT about mover opportunities. Reply STOP to opt out.'
+              : undefined,
+          })
+          .where(eq(leads.id, existing.id));
+        lead = { id: existing.id };
+        leadTouchpoints = existing.touchpoints;
+        logger.info(
+          { leadId: existing.id, previousChannel: existing.sourceChannel },
+          '[mover_application] re-application folded into existing lead',
+        );
+      } else {
+        [lead] = await db.insert(leads).values({
+          contactName: name,
+          contactEmail: email || null,
+          contactPhone,
+          sourceChannel: 'mover_application',
+          utmSource: referralSource || 'direct',
+          utmCampaign: 'ryan-brooks',
+          leadType: 'b2bm',
+          intentScore: 90,
+          status: 'new',
+          notes,
+          smsConsentAt: contactPhone ? new Date() : null,
+          smsConsentText: contactPhone
+            ? 'By submitting this form you agree to receive SMS from LervIT about mover opportunities. Reply STOP to opt out.'
+            : null,
+        }).returning({ id: leads.id });
+      }
 
       // Fire-and-forget: the applicant's 201 must not wait on Resend, and a
-      // send failure is the queued retry's problem, not the submit's. A fresh
-      // row always has touchpoints 0 (schema default).
+      // send failure is the queued retry's problem, not the submit's.
       void deliverApplicationReceipt({
         leadId: lead.id,
         contactName: name,
         email: email || null,
-        touchpoints: 0,
+        touchpoints: leadTouchpoints,
       }).catch((mailErr) => {
         logger.error(
           { err: mailErr, leadId: lead.id },

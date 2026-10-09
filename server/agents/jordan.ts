@@ -22,7 +22,11 @@ import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
-import { wasContactedToday, wasContactedWithinDays, wasEverSmsed } from './dedupe';
+import {
+  wasContactedTodayForContact,
+  wasContactedWithinDaysForContact,
+  wasEverSmsedForContact,
+} from './dedupe';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { hasSmsConsent } from '../lib/smsConsent';
 import {
@@ -227,7 +231,7 @@ export class JordanAgent extends BaseAgent {
       if (!lead.contactPhone) {
         return { skipped: true, reason: 'no_phone_for_sms_override' };
       }
-      const isFirstSms = !(await wasEverSmsed({ entityId: leadId, entityType: 'lead' }));
+      const isFirstSms = !(await wasEverSmsedForContact({ leadId }));
       if (hasSmsConsent(lead, { isFirstSms }) || !lead.contactEmail) {
         return this.sendManualSms(lead, options);
       }
@@ -242,9 +246,8 @@ export class JordanAgent extends BaseAgent {
     }
 
     // Dedupe: at most one Jordan touch per candidate per day.
-    const dedupe = await wasContactedToday({
-      entityId: leadId,
-      entityType: 'lead',
+    const dedupe = await wasContactedTodayForContact({
+      leadId: leadId,
       eventTypes: ['lead.mover_contacted', 'lead.mover_touched'],
     });
     if (dedupe.contacted) {
@@ -261,7 +264,7 @@ export class JordanAgent extends BaseAgent {
     // doesn't pay for a 600-token email nothing can send.
     const smsFallback = !lead.contactEmail && !!lead.contactPhone;
     if (smsFallback) {
-      const isFirstSms = !(await wasEverSmsed({ entityId: leadId, entityType: 'lead' }));
+      const isFirstSms = !(await wasEverSmsedForContact({ leadId }));
       if (!hasSmsConsent(lead, { isFirstSms })) {
         logger.warn(
           { leadId, source: lead.sourceChannel },
@@ -459,9 +462,8 @@ Candidate context: ${safeNotes || 'Calgary mover candidate'}
       return { skipped: true, reason: 'sms_opted_out_no_email' };
     }
 
-    const dedupe = await wasContactedToday({
-      entityId: leadId,
-      entityType: 'lead',
+    const dedupe = await wasContactedTodayForContact({
+      leadId: leadId,
       eventTypes: ['lead.mover_contacted', 'lead.mover_touched'],
     });
     if (dedupe.contacted) {
@@ -476,7 +478,7 @@ Candidate context: ${safeNotes || 'Calgary mover candidate'}
     // CASL: touch 2 texts only leads whose source implies express consent.
     // Everything else drops through to the email branch below. isFirstSms
     // carries the published-contact exemption's one-message limit.
-    const isFirstSms = !(await wasEverSmsed({ entityId: lead.id, entityType: 'lead' }));
+    const isFirstSms = !(await wasEverSmsedForContact({ leadId: lead.id }));
     const smsBlockedNoConsent =
       touchNumber === 2 && !!lead.contactPhone && !hasSmsConsent(lead, { isFirstSms });
     if (smsBlockedNoConsent) {
@@ -653,9 +655,8 @@ Application link: ${applyLink}`,
     // 23:59 and its 90s retry at 00:01 land either side of it and the receipt
     // goes out twice. The event is per-lead and a lead is submitted once, so a
     // wider window cannot suppress a retry that should run.
-    const dedupe = await wasContactedWithinDays({
-      entityId: leadId,
-      entityType: 'lead',
+    const dedupe = await wasContactedWithinDaysForContact({
+      leadId,
       eventTypes: ['lead.application_confirmed'],
       days: 1,
     });
@@ -677,7 +678,7 @@ Application link: ${applyLink}`,
 
   private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
     if (!lead.contactPhone) return { skipped: true, reason: 'no_contact_phone' };
-    const isFirstSms = !(await wasEverSmsed({ entityId: lead.id, entityType: 'lead' }));
+    const isFirstSms = !(await wasEverSmsedForContact({ leadId: lead.id }));
     if (!hasSmsConsent(lead, { isFirstSms })) {
       logger.warn(
         { leadId: lead.id, source: lead.sourceChannel },
@@ -686,9 +687,8 @@ Application link: ${applyLink}`,
       return { skipped: true, reason: 'no_sms_consent_no_email' };
     }
 
-    const dedupe = await wasContactedToday({
-      entityId: lead.id,
-      entityType: 'lead',
+    const dedupe = await wasContactedTodayForContact({
+      leadId: lead.id,
       eventTypes: ['lead.mover_contacted', 'lead.mover_touched'],
     });
     if (dedupe.contacted) {

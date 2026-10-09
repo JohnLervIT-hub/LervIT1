@@ -29,6 +29,7 @@ import { parseListingTitles, parseCraigslistDatedItems } from './scout';
 import { searchPlacesText } from './places-crawl';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { APPLIED_SOURCE_CHANNELS } from './jordan';
+import { canonicalPhone, isContactDuplicate } from './shared/contactDedup';
 
 const RYAN_SCORING_MODEL = 'claude-haiku-4-5-20251001';
 
@@ -674,9 +675,21 @@ export class RyanAgent extends BaseAgent {
       // Contact-level dedup — same phone/email already in the b2bm pool.
       // Only meaningful when we actually extracted contact info; the
       // fingerprint check above handles the no-contact case.
-      const contactPhone = phone ? `+1${phone}` : null;
+      //
+      // Normalized before both the dedupe check and the insert. `+1${phone}`
+      // pasted the scraped string straight on, so the same operator's number
+      // landed as +18254880222 on one sweep and +1-403-389-9595 on another,
+      // and the old exact-match guard could not see across them — 13 of the
+      // 19 duplicate groups in production differ only by format. An
+      // unparseable number stores NULL rather than the raw string: it is
+      // neither textable nor matchable, so keeping it only produces a row
+      // that looks contactable.
+      const contactPhone = canonicalPhone(phone);
+      if (phone && !contactPhone) {
+        logger.warn({ source: opts.source }, 'Ryan: unparseable phone on scraped lead — storing null');
+      }
       const contactEmail = email ?? null;
-      if (await this.isContactDuplicate(contactPhone, contactEmail)) {
+      if (await isContactDuplicate({ phone: contactPhone, email: contactEmail, leadType: 'b2bm' })) {
         logger.info(
           { source: opts.source, hasPhone: !!phone, hasEmail: !!email },
           'Ryan: skipping — contact already exists in b2bm pool',
@@ -764,28 +777,9 @@ export class RyanAgent extends BaseAgent {
     return rows.length > 0;
   }
 
-  /**
-   * Dedup guard for contact-bearing scraped leads. Skips if any b2bm lead
-   * already exists with the same phone or email. Complements wasSeen() —
-   * fingerprint-dedupe catches the same listing on the same source, this
-   * catches the same person posting across sources (Kijiji + Craigslist,
-   * or a repost with a different title).
-   */
-  private async isContactDuplicate(
-    phone: string | null,
-    email: string | null,
-  ): Promise<boolean> {
-    if (!phone && !email) return false;
-    const clauses: any[] = [];
-    if (phone) clauses.push(eq(leads.contactPhone, phone));
-    if (email) clauses.push(eq(leads.contactEmail, email));
-    const rows = await db
-      .select({ id: leads.id })
-      .from(leads)
-      .where(and(eq(leads.leadType, 'b2bm'), or(...clauses)!))
-      .limit(1);
-    return rows.length > 0;
-  }
+  // isContactDuplicate moved to ./shared/contactDedup — it now matches on
+  // normalized phone rather than the stored string, and /api/apply/mover
+  // needs the same check.
 
   private async scoreCandidate(text: string): Promise<number> {
     if (!text.trim()) return 0;
