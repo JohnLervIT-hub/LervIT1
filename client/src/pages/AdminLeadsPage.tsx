@@ -116,6 +116,47 @@ const STATUS_TONES: Record<string, string> = {
   cold: "bg-slate-100 text-slate-600",
 };
 
+const JORDAN_ACTION_LABELS: Record<string, string> = {
+  onboard_candidate: "Recruitment touch sent",
+  confirm_application: "Application receipt sent",
+  send_touch: "Follow-up touch sent",
+};
+
+/**
+ * Title + description for the Jordan trigger toast, from what the server says
+ * it did rather than from what the button asked for.
+ *
+ * Two cases this has to tell apart, both of which used to read as
+ * "Recruitment touch sent":
+ *   - The route resolves onboard_candidate to confirm_application on a lead
+ *     that already submitted the mover application, since Jordan's drip
+ *     refuses those. The response carries `action` (what ran) alongside
+ *     `requestedAction` (what we posted).
+ *   - Jordan returns { skipped, reason } — a dedupe, an opt-out, no reachable
+ *     channel — and nothing was sent at all.
+ */
+function jordanTriggerToast(body: any): { title: string; description: string } {
+  const action = String(body?.action ?? "") || "unknown action";
+  const requested = String(body?.requestedAction ?? body?.action ?? "") || action;
+  const result = body?.result ?? {};
+
+  if (result.skipped) {
+    return {
+      title: `Jordan skipped — ${action}`,
+      description: `Nothing sent. Reason: ${result.reason ?? "not given"}`,
+    };
+  }
+
+  const label = JORDAN_ACTION_LABELS[action] ?? `Ran ${action}`;
+  return {
+    title: `Jordan triggered — ${action}`,
+    description:
+      requested === action
+        ? `${label}.`
+        : `${label} — ${requested} does not apply to a lead that already applied.`,
+  };
+}
+
 const SOURCE_OPTIONS = [
   { value: "personal", label: "Personal" },
   { value: "referral", label: "Referral" },
@@ -296,8 +337,15 @@ export default function AdminLeadsPage() {
       });
       return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Jordan triggered", description: "Recruitment touch sent." });
+    onSuccess: (body: any) => {
+      const skipped = !!body?.result?.skipped;
+      toast({
+        ...jordanTriggerToast(body),
+        // A skip sent nothing. It is not an error, but it must not look like
+        // the success it used to be reported as — destructive is the only
+        // variant that reads differently.
+        ...(skipped ? { variant: "destructive" as const } : {}),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
     },
     onError: (err: any) => {
