@@ -15,17 +15,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = join(__dirname, 'sync-schema.sql');
 
 async function run() {
-  if (!process.env.DATABASE_URL) {
+  const migrationUrl = process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
+  if (!migrationUrl) {
     console.error('[startup-migrate] ERROR: DATABASE_URL is not set.');
     process.exit(1);
   }
 
   const sql = readFileSync(SCHEMA_PATH, 'utf8');
 
-  const host = process.env.DATABASE_URL?.split('@')[1]?.split('/')[0];
-  console.log('Connecting to:', host);
+  const host = migrationUrl.split('@')[1]?.split('/')[0];
+  console.log('Connecting to:', host, process.env.DATABASE_MIGRATION_URL ? '(migration role)' : '(runtime role)');
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  const client = new Client({ connectionString: migrationUrl });
   await client.connect();
   console.log('[startup-migrate] Connected.');
 
