@@ -330,19 +330,25 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB limit for mobile photos
   },
   fileFilter: (req, file, cb) => {
-    // Support mobile formats including HEIC/HEIF from iOS
-    const allowedExtensions = /jpeg|jpg|png|gif|webp|heic|heif|avif/;
-    const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
-    
-    // Check mimetype - be lenient for mobile browsers that may send generic types
-    const allowedMimeTypes = /image\/(jpeg|jpg|png|gif|webp|heic|heif|avif)/;
-    const mimetypeValid = allowedMimeTypes.test(file.mimetype) || file.mimetype.startsWith('image/');
-    
-    if (extname || mimetypeValid) {
+    // Both the extension AND the declared MIME type must be on the allowlist.
+    // This was `extname || mimetypeValid` with an `image/*` prefix escape on
+    // the MIME side, so either half could wave anything through.
+    const allowedExtensions = /^\.(jpeg|jpg|png|gif|webp|heic|heif|avif)$/;
+    const extOk = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
+
+    // Exact types, no prefix match. The HEIC variants are kept because iOS
+    // Safari really does send them; the generic `image/*` escape is gone.
+    const allowedMimeTypes = new Set([
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence',
+      'image/avif',
+    ]);
+    const mimeOk = allowedMimeTypes.has(file.mimetype.toLowerCase());
+
+    if (extOk && mimeOk) {
       return cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed!'));
     }
+    cb(new Error('Only image files are allowed!'));
   }
 });
 
@@ -784,6 +790,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register auth middleware globally
   app.use(authMiddleware);
+
+  // Blanket admin guard for the whole /api/admin surface.
+  //
+  // Every /api/admin/* handler already does its own role check, but each one
+  // does it inline (`requireAdmin(req, res)` or a hand-rolled
+  // `user.role !== 'admin'`), which means the protection is 147 independent
+  // copies and a new route is one forgotten line away from being public.
+  // This mount makes the check structural: a path-prefix middleware runs
+  // before any handler registered later in this function, whichever file the
+  // route lives in (voice-routes mounts /api/admin/voice/* too).
+  //
+  // Kept as a prefix mount rather than moving every route onto an
+  // express.Router(): the guarantee is identical and it does not require
+  // relocating 147 handlers out of this file. The inline checks are left in
+  // place deliberately — defence in depth, and they return the specific 403
+  // bodies some clients already branch on.
+  //
+  // Mounted after authMiddleware so req.user is resolved, and before
+  // adminAuditMiddleware so unauthorised calls never reach the audit log.
+  app.use("/api/admin", (req: Request, res: Response, next: NextFunction) => {
+    if (!requireAdmin(req, res)) return;
+    next();
+  });
 
   // Audit every mutating admin call. Mounted *after* authMiddleware so
   // req.user is populated when the res.finish handler fires.
@@ -2319,6 +2348,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enrich movers with user data and driving distance
       // Privacy: Mask full street addresses - only show city/area
       const ONE_HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000);
+      // Mover contact details are admin-only. This route is public (the Browse
+      // Movers page calls it unauthenticated), and it used to return every
+      // mover's email and phone to anyone. AdminMoversPage/AdminDashboard read
+      // the same route and do need them, so the fields are gated on the
+      // session role rather than dropped outright.
+      const requesterIsAdmin = (req as any).user?.role === 'admin';
       
       let enrichedMovers = await Promise.all(
         movers.map(async (mover) => {
@@ -2348,7 +2383,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             distance,
             drivingMinutes,
             isLiveLocation,
-            user: user ? { name: user.name, email: user.email, phone: user.phone } : null,
+            user: user
+              ? {
+                  name: user.name,
+                  ...(requesterIsAdmin ? { email: user.email, phone: user.phone } : {}),
+                }
+              : null,
             stripeConnect: stripeAccount ? {
               status: stripeAccount.onboardingStatus,
               chargesEnabled: stripeAccount.chargesEnabled,
@@ -5304,10 +5344,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mover accepts a job (with race condition protection)
   app.post("/api/bookings/:id/accept", async (req: Request, res: Response) => {
     try {
+      if (!requireUser(req, res)) return;
       const bookingId = req.params.id;
-      const { moverId } = validateBody(z.object({
-        moverId: z.string(),
-      }), req.body);
+      // SECURITY: moverId is derived from the session, never from the body.
+      // It used to be a body field, which made this endpoint unauthenticated
+      // *and* impersonatable: mover ids are enumerable via GET /api/movers, so
+      // any caller holding a bookingId could accept on a rival mover's behalf.
+      const user = (req as any).user;
+      // Named sessionMover: both handlers later re-fetch the row as `mover`.
+      const sessionMover = await storage.getMoverByUserId(user.id);
+      if (!sessionMover) return res.status(403).json({ error: 'Mover profile required' });
+      const moverId = sessionMover.id;
       
       // Get the booking
       const booking = await storage.getBooking(bookingId);
@@ -5535,10 +5582,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mover declines a job
   app.post("/api/bookings/:id/decline", async (req: Request, res: Response) => {
     try {
+      if (!requireUser(req, res)) return;
       const bookingId = req.params.id;
-      const { moverId } = validateBody(z.object({
-        moverId: z.string(),
-      }), req.body);
+      // SECURITY: session-derived, not body-supplied — see the accept route.
+      // Declining for someone else was the cheaper attack: decline on behalf of
+      // every rival notified for a booking and the dispatch falls to you.
+      const user = (req as any).user;
+      // Named sessionMover: both handlers later re-fetch the row as `mover`.
+      const sessionMover = await storage.getMoverByUserId(user.id);
+      if (!sessionMover) return res.status(403).json({ error: 'Mover profile required' });
+      const moverId = sessionMover.id;
       
       // Find the notification
       const notifications = await db
@@ -8486,7 +8539,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/reviews", async (req: Request, res: Response) => {
-    console.log('[Reviews] POST /api/reviews - Request body:', JSON.stringify(req.body));
+    // Body intentionally not logged — it carries reviewer name and free text.
+    logger.debug({ path: req.path, method: req.method }, '[Reviews] request received');
     try {
       if (!requireUser(req, res)) return;
       const authUser = (req as any).user as { id: string };
@@ -18040,29 +18094,12 @@ Respond with VALID JSON only:
     }
   });
 
-  // ===== ONE-TIME ADMIN PASSWORD RESET =====
-  // Only active when ADMIN_RESET_TOKEN env var is set. Remove after use.
-  app.post("/api/internal/reset-admin-password", async (req: Request, res: Response) => {
-    const token = process.env.ADMIN_RESET_TOKEN;
-    if (!token) return res.status(404).json({ error: "Not found" });
-    const provided = req.headers['x-reset-token'] as string | undefined;
-    if (!provided || provided !== token) return res.status(403).json({ error: "Forbidden" });
-    try {
-      const bcrypt = await import('bcryptjs');
-      const { newPassword } = req.body;
-      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
-        return res.status(400).json({ error: "newPassword must be at least 8 characters" });
-      }
-      const hash = await bcrypt.hash(newPassword, 12);
-      const result = await db
-        .update(usersTable)
-        .set({ password: hash })
-        .where(and(eq(usersTable.role, 'admin'), eq(usersTable.email, 'admin12@lervit.com')));
-      return res.json({ ok: true, message: "Admin password updated. Remove ADMIN_RESET_TOKEN now." });
-    } catch (err) {
-      return res.status(500).json({ error: "Failed to update password" });
-    }
-  });
+  // REMOVED: POST /api/internal/reset-admin-password (one-time admin password
+  // reset, gated only by the ADMIN_RESET_TOKEN env var). It hardcoded a single
+  // admin address, compared the token with a non-constant-time `!==`, and had
+  // no rate limit. It was marked "remove after use" and outlived its use.
+  // Admin password changes go through the normal authenticated reset flow.
+  // Remember to delete ADMIN_RESET_TOKEN from the Railway environment.
 
   // Register enterprise partner portal routes
   registerPartnerRoutes(app);

@@ -1589,6 +1589,59 @@ router.post(
 // the MVP (one server, short-lived chats) but is lost on restart / horizontal
 // scale — swap for a table if this ever survives past the pilot.
 
+/**
+ * Verifies Meta's `X-Hub-Signature-256` over the EXACT bytes Meta sent.
+ *
+ * Both inbound handlers used to parse `req.body` with no verification at all,
+ * so anyone who learned the URL could drive Nova — an LLM that sends outbound
+ * messages and spends model credits — and inject arbitrary text into its
+ * context. META_APP_SECRET was already in the environment, just unused here.
+ *
+ * The HMAC is computed over `req.rawBody`, the Buffer that express.json's
+ * `verify` hook stashes (server/index.ts), NOT over a re-serialised req.body:
+ * JSON.stringify would not reproduce Meta's byte layout and every signature
+ * would fail. This is the same approach the Stripe webhook already uses.
+ *
+ * Fails closed: an unset META_APP_SECRET rejects rather than skipping the
+ * check, so a missing env var cannot silently reopen the hole.
+ */
+function verifyMetaSignature(req: Request, res: Response): boolean {
+  const secret = process.env.META_APP_SECRET;
+  if (!secret) {
+    logger.error('[Nova Meta] META_APP_SECRET not set — rejecting webhook');
+    res.status(503).json({ error: 'Webhook verification is not configured' });
+    return false;
+  }
+
+  const header = req.headers['x-hub-signature-256'];
+  const signature = typeof header === 'string' ? header : undefined;
+  if (!signature) {
+    res.status(403).json({ error: 'Missing signature' });
+    return false;
+  }
+
+  const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+  if (!Buffer.isBuffer(rawBody)) {
+    logger.error('[Nova Meta] raw body unavailable — cannot verify signature');
+    res.status(400).json({ error: 'Invalid request body' });
+    return false;
+  }
+
+  const expected =
+    'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+  // timingSafeEqual throws on a length mismatch, so compare lengths first —
+  // a short or malformed header must be a 403, not an uncaught 500.
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    logger.warn('[Nova Meta] invalid webhook signature');
+    res.status(403).json({ error: 'Invalid signature' });
+    return false;
+  }
+  return true;
+}
+
 const MESSENGER_VERIFY_TOKEN =
   process.env.META_VERIFY_TOKEN ?? 'lervit_nova_messenger';
 const MESSENGER_GRAPH_URL = 'https://graph.facebook.com/v19.0/me/messages';
@@ -1651,6 +1704,7 @@ router.get('/api/nova/messenger/webhook', (req: Request, res: Response) => {
 router.post(
   '/api/nova/messenger/webhook',
   async (req: Request, res: Response) => {
+    if (!verifyMetaSignature(req, res)) return;
     res.status(200).send('EVENT_RECEIVED');
 
     try {
@@ -1667,9 +1721,11 @@ router.post(
           const messageText = event.message?.text as string | undefined;
           const postback = event.postback?.payload as string | undefined;
 
-          logger.info(
-            { senderId, messageText, postback },
-            '[Nova Messenger] Message received',
+          // Message text is customer content — not logged. senderId is the
+          // platform-scoped id, which is what we need to trace a conversation.
+          logger.debug(
+            { senderId, hasText: !!messageText, hasPostback: !!postback },
+            '[Nova Messenger] inbound message received',
           );
 
           await handleMessengerMessage({
@@ -2299,6 +2355,7 @@ router.get('/api/nova/instagram/webhook', (req: Request, res: Response) => {
 router.post(
   '/api/nova/instagram/webhook',
   async (req: Request, res: Response) => {
+    if (!verifyMetaSignature(req, res)) return;
     res.status(200).send('EVENT_RECEIVED');
 
     try {
@@ -2315,9 +2372,10 @@ router.post(
 
           if (!senderId || (!messageText && !postback)) continue;
 
-          logger.info(
-            { senderId, messageText, postback },
-            '[Nova Instagram] Message received',
+          // See the Messenger handler: no customer message content in logs.
+          logger.debug(
+            { senderId, hasText: !!messageText, hasPostback: !!postback },
+            '[Nova Instagram] inbound message received',
           );
 
           await handleInstagramMessage({

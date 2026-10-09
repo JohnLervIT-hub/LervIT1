@@ -11,6 +11,7 @@ import { serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { logger, logEvent } from "./logger";
 import { randomBytes } from "crypto";
+import { ZodError } from "zod";
 import { initBackgroundJobs } from "./background-jobs";
 import { startAgentWorkers } from "./agents/workers";
 import { registerAgentSubscriptions } from "./agents/subscriptions";
@@ -20,9 +21,11 @@ import {
   corsMiddleware, 
   generalApiLimiter, 
   securityHeaders,
+  contentSecurityPolicy,
   phoneVerificationLimiter,
   authLimiter,
-  paymentLimiter
+  paymentLimiter,
+  emailSmsLimiter
 } from "./middleware/security";
 
 const app = express();
@@ -158,6 +161,8 @@ app.use(corsMiddleware);
 
 // Security headers - prevents clickjacking, XSS, etc.
 app.use(securityHeaders);
+// CSP — Report-Only in production until the violation reports are reviewed.
+app.use(contentSecurityPolicy);
 
 // Rate limiting - prevents abuse (applied to /api routes)
 app.use('/api', generalApiLimiter);
@@ -182,6 +187,26 @@ app.use('/api/bookings/:id/confirm-payment', paymentLimiter);
 app.use('/api/bookings/:id/pay-with-saved-card', paymentLimiter);
 app.use('/api/payment-methods/setup-intent', paymentLimiter);
 app.use('/api/payment-methods/:id/set-default', paymentLimiter);
+
+// Endpoints that send an email/SMS or create a lead on an anonymous request
+// (5 req / min). Previously bounded only by generalApiLimiter's 1000/15min,
+// which is not a meaningful cap on something that costs money per call.
+app.use('/api/apply/mover', emailSmsLimiter);
+app.use('/api/leads/capture', emailSmsLimiter);
+app.use('/api/auth/resend-verification', emailSmsLimiter);
+app.use('/api/auth/pre-signup/resend-via-email', emailSmsLimiter);
+// NOT a blanket mount: /api/messages/notifications is polled every 5s by
+// MessageNotification.tsx (12 req/min), so a 5/min cap on the whole prefix
+// would 429 every user's inbox within seconds. Only the send POST — which is
+// what actually triggers an email/SMS — is limited. `req.path` is relative to
+// the mount point, so the send route is '/' and the poller is '/notifications'.
+const onlyMessageSend = (mw: express.RequestHandler): express.RequestHandler =>
+  (req, res, next) =>
+    req.method === 'POST' && (req.path === '/' || req.path === '')
+      ? mw(req, res, next)
+      : next();
+app.use('/api/messages', onlyMessageSend(emailSmsLimiter));
+app.use('/api/data-deletion', authLimiter);
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -238,6 +263,20 @@ let serverStarted = false;
     });
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      // A schema rejection is the caller's fault, not ours. validateBody()
+      // calls schema.parse, which throws, and with no branch here every bad
+      // payload surfaced as a 500 and got logged as a server error.
+      if (err instanceof ZodError) {
+        logger.warn(
+          { path: _req.path, method: _req.method, issues: err.errors.length },
+          'request failed schema validation',
+        );
+        if (!res.headersSent) {
+          res.status(400).json({ error: 'Validation error', details: err.errors });
+        }
+        return;
+      }
+
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
       

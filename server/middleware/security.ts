@@ -228,6 +228,39 @@ export const phoneVerificationLimiter = rateLimit({
 });
 
 /**
+ * Email/SMS-sending and lead-intake endpoints.
+ *
+ * These all cost money per request (Resend send, Telnyx SMS, an agent queue
+ * job) or create a row an operator then has to triage, and none of them were
+ * covered by anything tighter than generalApiLimiter's 1000/15min.
+ *
+ * Keyed on the session for signed-in callers and the IP subnet otherwise, the
+ * same way visionApiLimiter does it — a raw IPv6 address would let one client
+ * rotate within its own /64.
+ */
+export const emailSmsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isProduction ? 5 : 100,
+  message: { error: 'Too many requests. Please try again in a minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  keyGenerator: (req) => {
+    const userId = (req as any).session?.userId;
+    return userId ? `user:${userId}` : `ip:${ipKeyGenerator(req.ip ?? '')}`;
+  },
+  handler: (req, res) => {
+    logger.warn({
+      ip: req.ip,
+      path: req.path,
+      userId: (req as any).session?.userId,
+      event: 'email_sms_rate_limit_exceeded',
+    }, 'Email/SMS rate limit exceeded');
+    res.status(429).json({ error: 'Too many requests. Please try again in a minute.' });
+  },
+});
+
+/**
  * Security Headers Middleware
  * Adds essential security headers to all responses
  */
@@ -241,11 +274,58 @@ export const securityHeaders = (req: Request, res: Response, next: NextFunction)
   // Referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   
+  // Permissions-Policy: deny the device APIs this app never uses from the
+  // top-level document. Geolocation and camera are NOT denied — the booking
+  // flow asks for location, and photo upload uses the camera on mobile.
+  res.setHeader(
+    'Permissions-Policy',
+    'microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=()',
+  );
+
   if (isProduction) {
     // HSTS - only in production with HTTPS
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   
+  next();
+};
+
+/**
+ * Content-Security-Policy.
+ *
+ * Report-Only in production for now. The app has inline styles and inline
+ * scripts throughout (Vite's bootstrap, Stripe Elements, Google Maps), so an
+ * enforcing policy would need 'unsafe-inline' on both script-src and
+ * style-src to avoid breaking the page — which removes most of the XSS value
+ * while still being able to break checkout. Report-Only puts violations in
+ * the browser console so the real domain list can be collected first, then
+ * flipped to enforcing.
+ *
+ * Deliberately NOT using helmet: it would also set the five headers
+ * securityHeaders already sets above, and two middlewares writing the same
+ * headers is how they end up disagreeing.
+ */
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  // 'unsafe-eval' is required by Google Maps' JS API.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://*.googletagmanager.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' wss: https://api.stripe.com https://maps.googleapis.com https://*.google-analytics.com",
+  // Stripe Elements and Maps both render in iframes.
+  "frame-src 'self' https://js.stripe.com https://*.google.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+export const contentSecurityPolicy = (_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader(
+    isProduction ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy',
+    CSP_DIRECTIVES,
+  );
   next();
 };
 

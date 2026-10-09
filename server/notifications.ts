@@ -2,6 +2,7 @@ import type { Booking, User, Mover } from "@shared/schema";
 import { Resend } from 'resend';
 import { and, eq, gte } from 'drizzle-orm';
 import { getBaseUrl } from './utils/urls';
+import { logger } from './logger';
 import { db } from './db';
 import { businessEvents } from '@shared/schema';
 import { calculatePrice } from '@shared/pricing';
@@ -1150,12 +1151,9 @@ class NotificationService {
     const baseUrl = getBaseUrl();
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
-    console.log('[PASSWORD_RESET] Sending password reset email:', {
-      to: email,
-      name,
-      baseUrl,
-      resetUrl: resetUrl.substring(0, 60) + '...',
-    });
+    // The reset URL is NOT logged: it carries the single-use reset token, and
+    // the old 60-char truncation still exposed token bytes on short base URLs.
+    logger.debug({ baseUrl }, '[PASSWORD_RESET] sending password reset email');
     const subject = 'Reset Your LervIT Password';
     const body = `
 <!DOCTYPE html>

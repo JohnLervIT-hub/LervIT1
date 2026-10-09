@@ -4,8 +4,7 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
-.env
-.env.local
-.env.*.local
+.env*
+!.env.example
 # served by LervIT-Marketing repo (separate checkout)
 website-standalone/
