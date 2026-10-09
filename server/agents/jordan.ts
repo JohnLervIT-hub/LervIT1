@@ -22,7 +22,7 @@ import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
-import { wasContactedToday, wasEverSmsed } from './dedupe';
+import { wasContactedToday, wasContactedWithinDays, wasEverSmsed } from './dedupe';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { hasSmsConsent } from '../lib/smsConsent';
 import { buildMoverApplicationReceivedEmail } from '../lib/jordanEmailTemplates';
@@ -32,6 +32,19 @@ const JORDAN_SMS_MODEL = 'claude-haiku-4-5-20251001';
 const JORDAN_EMAIL = process.env.JORDAN_EMAIL?.trim() || 'jordan.hayes@lervit.com';
 const JORDAN_FROM = `Jordan Hayes | LervIT <${JORDAN_EMAIL}>`;
 const JORDAN_REPLY_TO = 'support@lervit.com';
+const JORDAN_AGENT_NAME = 'Jordan Hayes';
+
+/**
+ * Delay on the queued confirm_application job.
+ *
+ * The receipt is now sent inline from POST /api/apply/mover so it lands in
+ * seconds instead of behind whatever else is on the vetter queue. The queued
+ * job is the *retry* for that inline attempt, so it has to start after the
+ * attempt has had time to finish and emit lead.application_confirmed —
+ * otherwise both paths send and the applicant gets two receipts. 90s covers a
+ * Resend call plus a long wait in the process-global email rate limiter.
+ */
+export const APPLICATION_RECEIPT_RETRY_DELAY_MS = 90_000;
 
 /**
  * Source channels whose leads have already filled in the mover application.
@@ -150,7 +163,7 @@ interface ConfirmApplicationInput {
 }
 
 export class JordanAgent extends BaseAgent {
-  name = 'Jordan Hayes';
+  name = JORDAN_AGENT_NAME;
   code = 'vetter';
 
   protected async execute(
@@ -604,10 +617,10 @@ Application link: ${applyLink}`,
     const lead = await this.getLead(leadId);
     if (!lead) throw new Error(`Jordan: lead ${leadId} not found`);
 
-    const firstName = (lead.contactName ?? '').trim().split(/\s+/)[0] ?? '';
-    const { subject, html, text } = buildMoverApplicationReceivedEmail({ firstName });
-
     if (options.dryRun) {
+      const { subject, text } = buildMoverApplicationReceivedEmail({
+        firstName: firstNameOf(lead.contactName),
+      });
       return {
         dryRun: true,
         wouldContact: [leadId],
@@ -620,43 +633,41 @@ Application link: ${applyLink}`,
       };
     }
 
-    // Phone-only applicant (the form takes phone OR email): nothing to confirm
-    // to. Fall through rather than returning — Nova's call below is then the
-    // entire follow-up, and dropping it would leave the applicant with nothing.
-    let emailSent = false;
-    if (lead.contactEmail) {
-      emailSent = await sendJordanApplicationEmail(lead.contactEmail, subject, html, text);
-    } else {
-      logger.info({ leadId }, 'Jordan.confirmApplication: applicant has no email — receipt skipped');
-    }
-
-    // Same rule as the drip: only a send the provider accepted advances state.
-    if (emailSent) {
-      await db
-        .update(leads)
-        .set({
-          status: 'contacted',
-          touchpoints: (lead.touchpoints ?? 0) + 1,
-          lastTouchedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(leads.id, leadId));
-    } else {
-      logger.warn(
-        { leadId, hasEmail: !!lead.contactEmail },
-        'Jordan.confirmApplication: receipt not delivered — leaving lead state unchanged',
-      );
-    }
-
+    // Ahead of the dedupe check below, and idempotent on its fixed jobId: on
+    // the happy path the inline receipt has already landed and this job exists
+    // only to skip, so scheduling Nova after the check would mean the call
+    // never gets booked at all. Its own delay is +24h, so a 90s shift is noise.
     await this.scheduleNovaColdCallFollowUp(lead);
 
-    await emitEvent('lead.application_confirmed', 'lead', leadId, {
-      channel: 'email',
-      emailSent,
-      agentName: this.name,
+    // The route sends this receipt inline and only emits
+    // lead.application_confirmed once the provider has accepted it, so the
+    // event's presence means the applicant already has it. This job is the
+    // retry for the case where the inline attempt failed or the process died
+    // holding it.
+    // Not wasContactedToday: its window starts at midnight, so a submit at
+    // 23:59 and its 90s retry at 00:01 land either side of it and the receipt
+    // goes out twice. The event is per-lead and a lead is submitted once, so a
+    // wider window cannot suppress a retry that should run.
+    const dedupe = await wasContactedWithinDays({
+      entityId: leadId,
+      entityType: 'lead',
+      eventTypes: ['lead.application_confirmed'],
+      days: 1,
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId }, 'Jordan.confirmApplication: receipt already delivered — skipping');
+      return { skipped: true, reason: 'receipt_already_delivered' };
+    }
+
+    // Throws on a provider failure so the job fails and BullMQ retries it.
+    const emailSent = await deliverApplicationReceipt({
+      leadId,
+      contactName: lead.contactName,
+      email: lead.contactEmail,
+      touchpoints: lead.touchpoints ?? 0,
     });
 
-    return { success: true, channel: 'email' as const, emailSent };
+    return { success: true, channel: 'email' as const, emailSent, retry: true };
   }
 
   private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
@@ -802,6 +813,74 @@ function parseSubjectAndBody(raw: string, fallbackSubject: string): { subject: s
   return { subject, body: body || raw.trim() };
 }
 
+/** First token of a contact name, for the receipt greeting. */
+function firstNameOf(contactName: string | null | undefined): string {
+  return (contactName ?? '').trim().split(/\s+/)[0] ?? '';
+}
+
+export interface ApplicationReceiptTarget {
+  leadId: string;
+  contactName: string | null;
+  /** Null for a phone-only applicant — the form takes phone OR email. */
+  email: string | null;
+  /** Current touchpoints; a delivered receipt increments it. */
+  touchpoints: number;
+}
+
+/**
+ * Render and deliver the mover-application receipt, then record it.
+ *
+ * Shared by the two paths that send it so they cannot drift: the inline send
+ * in POST /api/apply/mover (fast path, fire-and-forget) and Jordan's queued
+ * confirm_application (durable retry).
+ *
+ * Throws when the provider rejects the send — the queued caller needs that to
+ * fail the job, and the inline caller logs it and leaves the retry to the job.
+ * Returns false only for the non-failures (dev mode, no API key, no address),
+ * which leave lead state untouched.
+ */
+export async function deliverApplicationReceipt(
+  target: ApplicationReceiptTarget,
+): Promise<boolean> {
+  const { leadId, contactName, email, touchpoints } = target;
+
+  if (!email) {
+    logger.info({ leadId }, 'Jordan: applicant has no email — receipt skipped');
+    return false;
+  }
+
+  const { subject, html, text } = buildMoverApplicationReceivedEmail({
+    firstName: firstNameOf(contactName),
+  });
+
+  const emailSent = await sendJordanApplicationEmail(email, subject, html, text);
+  if (!emailSent) {
+    logger.warn({ leadId }, 'Jordan: receipt not sent — leaving lead state unchanged');
+    return false;
+  }
+
+  await db
+    .update(leads)
+    .set({
+      status: 'contacted',
+      touchpoints: touchpoints + 1,
+      lastTouchedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(leads.id, leadId));
+
+  // Emitted only once the provider has accepted the send. confirmApplication
+  // dedupes on this event, so emitting it on a failed or skipped send would
+  // suppress the retry that is the whole point of the queued job.
+  await emitEvent('lead.application_confirmed', 'lead', leadId, {
+    channel: 'email',
+    emailSent: true,
+    agentName: JORDAN_AGENT_NAME,
+  });
+
+  return true;
+}
+
 /**
  * Send a pre-rendered Jordan template (html + plain-text already built).
  *
@@ -817,6 +896,9 @@ async function sendJordanApplicationEmail(
   html: string,
   text: string,
 ): Promise<boolean> {
+  // Neither of these is a provider failure, so they return false rather than
+  // throwing — a local submit must not burn three attempts and log three
+  // errors for a send that was never going to happen.
   if (process.env.NODE_ENV === 'development') {
     logger.info({ to, subject }, 'Jordan: dev mode — application receipt not sent');
     return false;
@@ -825,21 +907,21 @@ async function sendJordanApplicationEmail(
     logger.warn('Jordan: RESEND_API_KEY not set — application receipt skipped');
     return false;
   }
-  try {
-    await sendResendEmail({
-      from: EMAIL_SENDERS.TRANSACTIONAL,
-      to,
-      replyTo: JORDAN_REPLY_TO,
-      subject,
-      html,
-      text,
-    });
-    logger.info({ to, subject }, 'Jordan: application receipt sent');
-    return true;
-  } catch (err) {
-    logger.error({ err }, 'Jordan: Resend threw on application receipt');
-    return false;
-  }
+  // Deliberately NOT swallowed, unlike sendJordanEmail. A receipt is the only
+  // thing the applicant is waiting on, so a provider failure has to surface:
+  // the caller turns it into a failed BullMQ job, which retries 3x on the
+  // queue's exponential 5s backoff. Returning false here is what silently
+  // dropped receipts — the job completed, so nothing ever retried.
+  await sendResendEmail({
+    from: EMAIL_SENDERS.TRANSACTIONAL,
+    to,
+    replyTo: JORDAN_REPLY_TO,
+    subject,
+    html,
+    text,
+  });
+  logger.info({ to, subject }, 'Jordan: application receipt sent');
+  return true;
 }
 
 async function sendJordanEmail(to: string, subject: string, body: string): Promise<boolean> {

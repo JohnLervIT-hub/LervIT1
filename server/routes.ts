@@ -109,6 +109,10 @@ import { ember } from "./agents/ember";
 import { metaProvider } from "./providers/meta";
 import { linkedInProvider } from "./providers/linkedin";
 import { reid } from "./agents/reid";
+import {
+  deliverApplicationReceipt,
+  APPLICATION_RECEIPT_RETRY_DELAY_MS,
+} from "./agents/jordan";
 import { documentAudits, documentIrregularities } from "@shared/schema";
 import { novaWebhookRouter } from "./nova-webhook-routes";
 import { resolveTripEta, NO_ETA } from "./lib/tripEta";
@@ -17080,6 +17084,14 @@ Respond with VALID JSON only:
   // submitted the form asks them to do the thing they already did.
   // hasSubmittedApplication in agents/jordan keeps the drip off these leads on
   // every other path too (Ryan's router, the event bus, an admin trigger).
+  //
+  // The receipt goes out inline, fire-and-forget, right after the insert. It
+  // used to be queue-only, which meant it sat behind whatever was on the
+  // vetter queue — Ryan's 4-hourly sweep enqueues an unbounded batch of
+  // Claude-bound onboard_candidate jobs at concurrency 3, so a receipt could
+  // be minutes late. confirm_application stays as the durable retry (delayed
+  // and prioritised; it dedupes on lead.application_confirmed), so a crash
+  // between the insert and the send still gets the applicant their receipt.
   app.post("/api/apply/mover", async (req: Request, res: Response) => {
     try {
       const body = req.body ?? {};
@@ -17133,18 +17145,46 @@ Respond with VALID JSON only:
           : null,
       }).returning({ id: leads.id });
 
+      // Fire-and-forget: the applicant's 201 must not wait on Resend, and a
+      // send failure is the queued retry's problem, not the submit's. A fresh
+      // row always has touchpoints 0 (schema default).
+      void deliverApplicationReceipt({
+        leadId: lead.id,
+        contactName: name,
+        email: email || null,
+        touchpoints: 0,
+      }).catch((mailErr) => {
+        logger.error(
+          { err: mailErr, leadId: lead.id },
+          '[mover_application] inline receipt failed — confirm_application will retry',
+        );
+      });
+
       const jordanQueue = createAgentQueue(QUEUE_NAMES.VETTER);
       if (jordanQueue) {
-        try {
-          await jordanQueue.add('confirm_application', { leadId: lead.id });
-        } catch (queueErr) {
-          logger.warn({ err: queueErr, leadId: lead.id }, '[mover_application] jordan enqueue failed');
-        }
+        // Not awaited. With maxRetriesPerRequest: null an unreachable Redis
+        // makes add() hang rather than throw, which held the response open
+        // until the client gave up — on a lead that was already committed, so
+        // the applicant saw a failure and resubmitted.
+        //
+        // priority 1 beats the queue default (0 = lowest in BullMQ), so the
+        // retry jumps a backlog of onboard_candidate jobs instead of queuing
+        // behind their Claude calls.
+        void jordanQueue
+          .add(
+            'confirm_application',
+            { leadId: lead.id },
+            { priority: 1, delay: APPLICATION_RECEIPT_RETRY_DELAY_MS },
+          )
+          .catch((queueErr) => {
+            logger.warn({ err: queueErr, leadId: lead.id }, '[mover_application] jordan enqueue failed');
+          });
       } else {
         logger.warn({ leadId: lead.id }, '[mover_application] jordan queue unavailable — lead saved');
       }
 
-      await emitEvent('lead.mover_application', 'lead', lead.id, { vehicleType, neighbourhood });
+      // Already swallows its own errors, so there is nothing to await for.
+      void emitEvent('lead.mover_application', 'lead', lead.id, { vehicleType, neighbourhood });
 
       return res.status(201).json({ ok: true, leadId: lead.id });
     } catch (err) {
