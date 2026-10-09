@@ -24,12 +24,26 @@
  * fold a customer into a mover candidate.
  */
 
-import { and, eq, isNotNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, isNotNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db';
 import { leads } from '@shared/schema';
 import { normalizeToE164 } from '../../notifications';
 
 export type LeadType = 'b2c' | 'b2bm' | 'b2bp';
+
+/**
+ * Status written on a duplicate row that was folded into a survivor. The row is
+ * kept for audit but is dead: its business_events have been reassigned and no
+ * agent should work it again.
+ *
+ * Excluded from both lookups below. Without this, findContactDuplicate ordered
+ * by created_at and could return a merged row whenever it predated its own
+ * survivor — 2 of 13 production groups did, one of them a real applicant's
+ * number. A re-application would then fold into the dead row, which the route's
+ * UPDATE leaves at status 'merged' and therefore invisible to every sweep,
+ * while the survivor keeps the history: one person, two half-rows.
+ */
+const MERGED_STATUS = 'merged';
 
 /** Last 10 digits of a stored phone — the cross-format match key. */
 const storedPhoneKey = sql`right(regexp_replace(${leads.contactPhone}, '[^0-9]', '', 'g'), 10)`;
@@ -107,7 +121,7 @@ export async function findContactDuplicate(opts: {
       notes: leads.notes,
     })
     .from(leads)
-    .where(and(eq(leads.leadType, opts.leadType), clause))
+    .where(and(eq(leads.leadType, opts.leadType), ne(leads.status, MERGED_STATUS), clause))
     .orderBy(leads.createdAt)
     .limit(1);
 
@@ -159,6 +173,7 @@ export async function findSiblingLeadIds(leadId: string): Promise<string[]> {
       .where(
         and(
           eq(leads.leadType, self.leadType),
+          ne(leads.status, MERGED_STATUS),
           or(isNotNull(leads.contactPhone), isNotNull(leads.contactEmail))!,
           clause,
         ),
