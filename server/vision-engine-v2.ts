@@ -436,7 +436,14 @@ function enforceMinimumVolume(
     }
   }
   
-  // Fall back to category minimum
+  // Fall back to category minimum. The Storage minimum covers small shelving units;
+  // a single cardboard box is legitimately 2.8-5.3 ft³, and in a counted box scene the
+  // per-item volume is multiplied by the box count, so flooring it at 10 ft³ would
+  // inflate the load several-fold.
+  if (nameLower.includes('box')) {
+    return { volume: calculatedVolume, wasEnforced: false };
+  }
+
   const categoryMin = CATEGORY_MIN_VOLUMES[category] || 0;
   if (calculatedVolume < categoryMin) {
     console.log(`[Vision Engine 2.0] Volume enforcement: ${calculatedVolume}ft³ → ${categoryMin}ft³ (min for ${category})`);
@@ -444,6 +451,16 @@ function enforceMinimumVolume(
   }
   
   return { volume: calculatedVolume, wasEnforced: false };
+}
+
+/**
+ * Detects a counted box-scene name produced by the BOX / STORAGE SCENE COUNTING
+ * prompt rules — e.g. "38 moving boxes (large)",
+ * "10 moving boxes (mixed sizes) + 2 suitcases".
+ * Such a name is a whole load counted in box units, not one findable item.
+ */
+function isCountedBoxScene(itemName: string): boolean {
+  return /^\d+\s+[^,]*\bboxes\b/i.test(itemName.trim());
 }
 
 /**
@@ -494,8 +511,10 @@ function correctCategory(itemName: string, detectedCategory: string): {
   }
   
   // Luggage keywords - bags, suitcases, backpacks, etc.
+  // A counted box scene ("10 moving boxes + 2 suitcases") mentions luggage but is not
+  // a luggage item: the suitcases are part of the box count, so keep it in Storage.
   const luggageKeywords = ['bag', 'suitcase', 'backpack', 'duffel', 'luggage', 'carry-on', 'briefcase', 'purse', 'handbag', 'tote', 'messenger', 'gym bag', 'travel bag', 'duffle'];
-  if (luggageKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Luggage') {
+  if (luggageKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Luggage' && !isCountedBoxScene(itemName)) {
     console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Luggage (detected "${itemName}")`);
     return { category: 'Luggage', wasCorrected: true, originalCategory: detectedCategory };
   }
@@ -648,7 +667,22 @@ async function detectItemWithVision(imageBase64: string): Promise<VisionDetectio
 
 Analyze this image and identify the item with maximum detail.
 
-ITEM IDENTIFICATION:
+SCENE TYPE CHECK (do this FIRST before anything else):
+Before applying any single-item rule, decide which kind of photo this is.
+This is a MOVING SCENE — not a single item — if ANY of these are true:
+• You can see 3 or more cardboard boxes (stacked, in a row, or scattered).
+• You can see a mix of cardboard boxes AND luggage (suitcases, duffels, travel bags).
+• Boxes carry handwritten or printed room labels (Kitchen, Books, Clothes, Fragile, Office).
+• The frame is a packed room, hallway, or doorway of belongings ready to be moved.
+If it IS a moving scene:
+→ SKIP every single-item rule below — the ≥85% primary-item rule, the IGNORE list,
+  and the furniture-set rules do NOT apply.
+→ Go straight to "BOX / STORAGE SCENE COUNTING" and count EVERYTHING in the frame.
+→ Never return a single box or a single suitcase for a moving scene. Picking one
+  item out of a full load is the most serious error you can make here.
+If it is NOT a moving scene (one dominant object is being photographed), continue below.
+
+ITEM IDENTIFICATION (single-item photos only — skip if this is a moving scene):
 Identify the PRIMARY item occupying ≥85% of the visual frame.
 
 For FURNITURE SETS (dining table with chairs, bed with headboard, sofa with ottoman):
@@ -758,13 +792,23 @@ If the image shows a scene with many cardboard moving boxes (not a single item):
 • Your PRIMARY job is to COUNT every box as accurately as possible.
 • Method: estimate (visible columns) × (visible rows/tiers per column) × (estimated depth layers front-to-back).
 • Use door frames, walls, or furniture as scale references to judge stack depth.
-• Return itemName as "N moving boxes (size)" — e.g. "42 moving boxes (large)".
-• Set category to "Storage", subcategory to "Boxes".
-• Set quantity to the total box count you estimated (this is the most important field).
+• COUNT SUITCASES AND LUGGAGE SEPARATELY from the boxes. Rolling suitcases, duffels
+  and travel bags standing in a moving scene are part of the load — never ignore them,
+  and never let them replace the box count.
+• Return itemName as "N moving boxes (size)" when only boxes are present — e.g.
+  "42 moving boxes (large)" — and append the luggage when any is present, e.g.
+  "10 moving boxes (mixed sizes) + 2 suitcases".
+• Set category to "Storage", subcategory to "Boxes" — keep both even when the scene
+  also contains suitcases.
+• Set quantity to the TOTAL number of packable units you counted, boxes PLUS luggage
+  (one suitcase takes about the same space as one medium box). For 10 boxes and
+  2 suitcases, quantity = 12. This is the most important field — the whole load is
+  priced from it.
 • Dimensions should describe ONE single box (choose: small≈40×30×30cm, medium≈50×40×40cm, large≈60×50×50cm).
-• If mixed sizes, use the dominant size and note it in itemName.
+• If mixed sizes, use the dominant size and write "(mixed sizes)" in itemName.
 • estimatedWeight = quantity × kg_per_box (small=15kg, medium=20kg, large=25kg when packed).
 • Example correct output: itemName="38 moving boxes (large)", quantity=38, dimensions=60×50×50, estimatedWeight=950
+• Example correct output: itemName="10 moving boxes (mixed sizes) + 2 suitcases", quantity=12, category="Storage", subcategory="Boxes", dimensions=50×40×40, estimatedWeight=240
 
 SIZING RULE:
 When uncertain between two size estimates, always choose the LARGER option.
