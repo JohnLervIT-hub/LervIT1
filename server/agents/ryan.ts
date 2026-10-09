@@ -391,25 +391,13 @@ export class RyanAgent extends BaseAgent {
           continue;
         }
 
-        const score = await this.scoreCandidate(text);
+        // Google Alerts entries are public feed snippets carrying neither
+        // phone nor email, so no entry can become an actionable lead. Skip
+        // before scoreCandidate: scoring an entry we are guaranteed to drop
+        // spends an LLM call per feed item for nothing. Scoring, dedup and
+        // the insert all live in git history if the feeds ever carry contacts.
         logger.info(
-          { source, score, title: title.slice(0, 80), pubDate: updated },
-          'Ryan: GA signal scored',
-        );
-        if (score < ROUTE_TO_JORDAN_SCORE) continue;
-
-        const fingerprint = (link || title).slice(0, 80);
-        if (!fingerprint || fingerprint.length < 5) {
-          logger.warn({ source, fingerprint }, 'Ryan: skipping — empty or too-short fingerprint');
-          continue;
-        }
-        if (await this.wasSeen(source, fingerprint)) continue;
-
-        // Google Alerts entries are public feed snippets with no contact info.
-        // Skip per the same rule as scraped listings: at least one of phone
-        // or email must be present for a lead to be actionable.
-        logger.info(
-          { source, title: title.slice(0, 60) },
+          { source, title: title.slice(0, 60), link },
           'Ryan: skipping GA lead — no email or phone in feed entry',
         );
         continue;
