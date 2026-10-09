@@ -16430,6 +16430,43 @@ Respond with VALID JSON only:
     }
   });
 
+  // Public newsletter archive (sent issues only — no drafts or pending_review).
+  app.get("/api/newsletters", async (_req: Request, res: Response) => {
+    try {
+      const rows = await db
+        .select({
+          id: newsletters.id,
+          subject: newsletters.subject,
+          preheader: newsletters.preheader,
+          sentAt: newsletters.sentAt,
+          createdAt: newsletters.createdAt,
+        })
+        .from(newsletters)
+        .where(eq(newsletters.status, 'sent'))
+        .orderBy(desc(newsletters.sentAt))
+        .limit(100);
+      res.json({ newsletters: rows });
+    } catch (err) {
+      logger.error({ err }, '[Newsletter] archive listing failed');
+      res.status(500).json({ error: 'Failed to load newsletters' });
+    }
+  });
+
+  app.get("/api/newsletters/:id", async (req: Request, res: Response) => {
+    try {
+      const [row] = await db
+        .select()
+        .from(newsletters)
+        .where(and(eq(newsletters.id, req.params.id), eq(newsletters.status, 'sent')))
+        .limit(1);
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      res.json(row);
+    } catch (err) {
+      logger.error({ err }, '[Newsletter] fetch failed');
+      res.status(500).json({ error: 'Failed to load newsletter' });
+    }
+  });
+
   // Admin content review UIs.
   app.get("/api/admin/blog/posts", async (req: Request, res: Response) => {
     try {

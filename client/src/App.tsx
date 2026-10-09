@@ -95,6 +95,8 @@ const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const MoverAgreement = lazy(() => import("@/pages/MoverAgreement"));
 const Downloads = lazy(() => import("@/pages/Downloads"));
+const BlogPage = lazy(() => import("@/pages/BlogPage"));
+const NewsletterArchivePage = lazy(() => import("@/pages/NewsletterArchivePage"));
 
 const ENTERPRISE_ENABLED = import.meta.env.VITE_ENABLE_ENTERPRISE === "true";
 
@@ -194,6 +196,10 @@ function Router() {
         <Route path="/support" component={Support} />
         <Route path="/request-move" component={RequestMove} />
         <Route path="/quote/:id" component={QuotePage} />
+        <Route path="/blog/:slug" component={BlogPage} />
+        <Route path="/blog" component={BlogPage} />
+        <Route path="/newsletters/:id" component={NewsletterArchivePage} />
+        <Route path="/newsletters" component={NewsletterArchivePage} />
 
         {/* Customer-Only Routes */}
         <Route path="/dashboard">

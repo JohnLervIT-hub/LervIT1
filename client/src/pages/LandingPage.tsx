@@ -953,7 +953,8 @@ export default function LandingPage() {
                 <li><a href="#" className="hover:text-foreground transition-colors">About Us</a></li>
                 <li><a href="#" className="hover:text-foreground transition-colors">Careers</a></li>
                 <li><a href="#" className="hover:text-foreground transition-colors">Press</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Blog</a></li>
+                <li><Link href="/blog" className="hover:text-foreground transition-colors">Blog</Link></li>
+                <li><Link href="/newsletters" className="hover:text-foreground transition-colors">Newsletter</Link></li>
               </ul>
             </div>
             
