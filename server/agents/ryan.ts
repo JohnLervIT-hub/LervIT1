@@ -405,32 +405,14 @@ export class RyanAgent extends BaseAgent {
         }
         if (await this.wasSeen(source, fingerprint)) continue;
 
+        // Google Alerts entries are public feed snippets with no contact info.
+        // Skip per the same rule as scraped listings: at least one of phone
+        // or email must be present for a lead to be actionable.
         logger.info(
-          { fingerprint: fingerprint.slice(0, 50), score, source },
-          'Ryan: attempting GA lead insert',
+          { source, title: title.slice(0, 60) },
+          'Ryan: skipping GA lead — no email or phone in feed entry',
         );
-        try {
-          await db.insert(leads).values({
-            contactName: 'Unknown',
-            sourceChannel: source,
-            utmSource: 'google_alerts',
-            utmCampaign: 'ryan-brooks',
-            leadType: 'b2bm',
-            intentScore: score,
-            status: 'new',
-            notes: `Title: ${title}\nURL: ${link}\nDesc: ${summary.slice(0, 300)}`,
-          });
-          created++;
-          logger.info(
-            { source, title: title.slice(0, 60), score },
-            'Ryan: GA lead inserted successfully',
-          );
-        } catch (err) {
-          logger.error(
-            { err: err instanceof Error ? err.message : String(err), source, fingerprint },
-            'Ryan: GA lead insert FAILED',
-          );
-        }
+        continue;
       }
     }
 
