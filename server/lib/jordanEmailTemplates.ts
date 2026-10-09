@@ -148,8 +148,23 @@ LervIT Team
 LervIT Technologies Corp - Calgary, Alberta, Canada`;
 }
 
-function renderShell(opts: { subject: string; firstName: string; body: string }): string {
-  const { subject, firstName, body } = opts;
+interface BannerSpec {
+  /** Background of the banner strip. */
+  bg: string;
+  /** HTML entity for the glyph. */
+  icon: string;
+  /** Title colour. */
+  text: string;
+  title: string;
+}
+
+function renderShell(opts: {
+  subject: string;
+  firstName: string;
+  body: string;
+  banner: BannerSpec;
+}): string {
+  const { subject, firstName, body, banner } = opts;
 
   return `<!DOCTYPE html>
 <html>
@@ -176,10 +191,10 @@ function renderShell(opts: { subject: string; firstName: string; body: string })
           </tr>
 
           <tr>
-            <td style="background:#EFF6FF;padding:20px 40px;text-align:center;">
-              <div style="font-size:28px;line-height:1;margin-bottom:6px;">&#128221;</div>
-              <div style="font-size:16px;font-weight:700;color:#1D4ED8;">
-                Application Received
+            <td style="background:${banner.bg};padding:20px 40px;text-align:center;">
+              <div style="font-size:28px;line-height:1;margin-bottom:6px;">${banner.icon}</div>
+              <div style="font-size:16px;font-weight:700;color:${banner.text};">
+                ${escapeHtml(banner.title)}
               </div>
             </td>
           </tr>
@@ -253,7 +268,104 @@ export function buildMoverApplicationReceivedEmail(
 
   return {
     subject,
-    html: renderShell({ subject, firstName, body: applicationReceivedBody() }),
+    html: renderShell({
+      subject,
+      firstName,
+      body: applicationReceivedBody(),
+      banner: { bg: '#EFF6FF', icon: '&#128221;', text: '#1D4ED8', title: 'Application Received' },
+    }),
     text: applicationReceivedText(firstName),
+  };
+}
+
+// ── delayed variant ────────────────────────────────────────
+
+/**
+ * "Sorry for the delay" receipt, for an applicant whose follow-up went wrong.
+ *
+ * Exists because the standard receipt commits to a review "within
+ * ${APPLICATION_REVIEW_DAYS} business days" and reads as if the application
+ * had just arrived. For the backfill cohort — people who applied weeks ago and
+ * got the recruitment drip instead of a receipt — both of those are false, and
+ * restating them as a fourth or fifth Jordan email would be worse than the
+ * original miss. This one names the gap, drops the timeline promise, and
+ * carries the same signup link.
+ */
+export interface DelayedApplicationEmailData {
+  firstName: string;
+  /** When they applied, already formatted for prose (e.g. "September 11"). */
+  appliedOn: string;
+}
+
+function delayedBody(data: DelayedApplicationEmailData): string {
+  const signupUrl = moverSignupLink();
+  const appliedOn = escapeHtml(data.appliedOn);
+
+  return `
+    <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;">
+      You applied to move with LervIT on <strong>${appliedOn}</strong>, and our
+      follow-up went wrong: you got our recruiting emails instead of a straight
+      answer about your application. That&#39;s on us, and I&#39;m sorry.
+    </p>
+
+    <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;">
+      Your application is in and still active. Here&#39;s the link you should
+      have had from the start &mdash; it&#39;s the account you&#39;ll use to
+      upload your documents and pick up jobs.
+    </p>
+
+    <table cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td style="background:#2563EB;border-radius:8px;">
+          <a
+            href="${signupUrl}"
+            style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#FFFFFF;text-decoration:none;"
+          >Create your mover account</a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0;font-size:15px;color:#475569;line-height:1.6;">
+      If you&#39;d rather not go ahead, or you have any questions, just reply to
+      this email &mdash; it comes straight to us.
+    </p>`;
+}
+
+function delayedText(data: DelayedApplicationEmailData): string {
+  return `Hi ${data.firstName},
+
+You applied to move with LervIT on ${data.appliedOn}, and our follow-up went
+wrong: you got our recruiting emails instead of a straight answer about your
+application. That's on us, and I'm sorry.
+
+Your application is in and still active. Here's the link you should have had
+from the start - it's the account you'll use to upload your documents and pick
+up jobs:
+${moverSignupLink()}
+
+If you'd rather not go ahead, or you have any questions, just reply to this
+email - it comes straight to us.
+
+Jordan
+LervIT Team
+
+LervIT Technologies Corp - Calgary, Alberta, Canada`;
+}
+
+export function buildMoverApplicationDelayedEmail(
+  data: DelayedApplicationEmailData,
+): BuiltEmail {
+  const firstName = data.firstName.trim() || 'there';
+  const subject = `Your LervIT application — sorry for the delay, ${firstName}`;
+
+  return {
+    subject,
+    html: renderShell({
+      subject,
+      firstName,
+      body: delayedBody({ ...data, firstName }),
+      banner: { bg: '#FEF3C7', icon: '&#128172;', text: '#92400E', title: 'Still Active' },
+    }),
+    text: delayedText({ ...data, firstName }),
   };
 }

@@ -25,7 +25,10 @@ import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedToday, wasContactedWithinDays, wasEverSmsed } from './dedupe';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { hasSmsConsent } from '../lib/smsConsent';
-import { buildMoverApplicationReceivedEmail } from '../lib/jordanEmailTemplates';
+import {
+  buildMoverApplicationReceivedEmail,
+  buildMoverApplicationDelayedEmail,
+} from '../lib/jordanEmailTemplates';
 
 const JORDAN_EMAIL_MODEL = 'claude-sonnet-4-6';
 const JORDAN_SMS_MODEL = 'claude-haiku-4-5-20251001';
@@ -827,6 +830,17 @@ export interface ApplicationReceiptTarget {
   email: string | null;
   /** Current touchpoints; a delivered receipt increments it. */
   touchpoints: number;
+  /**
+   * Which receipt to send. 'receipt' (the default, and what both live paths
+   * use) is the standard one, which commits to a review within
+   * APPLICATION_REVIEW_DAYS and reads as if the application just arrived.
+   * 'delayed' is for a backfill of applicants whose follow-up went wrong weeks
+   * ago, where that promise is already broken — it names the gap instead and
+   * needs `appliedOn`.
+   */
+  variant?: 'receipt' | 'delayed';
+  /** Required by the 'delayed' variant: when they applied, e.g. "September 11". */
+  appliedOn?: string;
 }
 
 /**
@@ -851,9 +865,14 @@ export async function deliverApplicationReceipt(
     return false;
   }
 
-  const { subject, html, text } = buildMoverApplicationReceivedEmail({
-    firstName: firstNameOf(contactName),
-  });
+  const firstName = firstNameOf(contactName);
+  const { subject, html, text } =
+    target.variant === 'delayed'
+      ? buildMoverApplicationDelayedEmail({
+          firstName,
+          appliedOn: target.appliedOn ?? 'the day you applied',
+        })
+      : buildMoverApplicationReceivedEmail({ firstName });
 
   const emailSent = await sendJordanApplicationEmail(email, subject, html, text);
   if (!emailSent) {
