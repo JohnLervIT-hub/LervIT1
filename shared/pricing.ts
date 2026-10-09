@@ -518,7 +518,7 @@ export function calculatePrice({
   const perKmRate = cfg.kmRates[vehicleClass];
   const distanceFee = distanceKm * perKmRate;
 
-  // STEP 7 — Load fee (raw volume × $0.40)
+  // STEP 7 — Load fee (raw volume × $0.35)
   const loadFee = rawVolume * cfg.volumeRate;
 
   // STEP 8 — Access fees
