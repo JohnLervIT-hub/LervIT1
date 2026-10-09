@@ -25,12 +25,31 @@ import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedToday, wasEverSmsed } from './dedupe';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { hasSmsConsent } from '../lib/smsConsent';
+import { buildMoverApplicationReceivedEmail } from '../lib/jordanEmailTemplates';
 
 const JORDAN_EMAIL_MODEL = 'claude-sonnet-4-6';
 const JORDAN_SMS_MODEL = 'claude-haiku-4-5-20251001';
 const JORDAN_EMAIL = process.env.JORDAN_EMAIL?.trim() || 'jordan.hayes@lervit.com';
 const JORDAN_FROM = `Jordan Hayes | LervIT <${JORDAN_EMAIL}>`;
 const JORDAN_REPLY_TO = 'support@lervit.com';
+
+/**
+ * Source channels whose leads have already filled in the mover application.
+ *
+ * These people are past recruiting — they asked to be movers. The four-touch
+ * drip in onboardCandidate/sendTouch pitches "Apply to become a LervIT mover"
+ * and links /become-a-mover, so firing it at an applicant asks them to do the
+ * thing they just did. Anything in this set gets the confirmation receipt
+ * (confirmApplication) instead and is skipped by the drip, whichever path
+ * enqueued it — the intake route, Ryan's router, the event bus or an admin
+ * trigger.
+ */
+const APPLIED_SOURCE_CHANNELS: ReadonlySet<string> = new Set(['mover_application']);
+
+/** True when the lead already submitted the mover application. */
+export function hasSubmittedApplication(lead: { sourceChannel?: string | null }): boolean {
+  return !!lead.sourceChannel && APPLIED_SOURCE_CHANNELS.has(lead.sourceChannel);
+}
 
 export const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
   2: 24 * 60 * 60 * 1000,
@@ -126,6 +145,9 @@ interface SendTouchInput {
   leadId: string;
   touchNumber: number;
 }
+interface ConfirmApplicationInput {
+  leadId: string;
+}
 
 export class JordanAgent extends BaseAgent {
   name = 'Jordan Hayes';
@@ -141,6 +163,8 @@ export class JordanAgent extends BaseAgent {
         return this.onboardCandidate(input as OnboardCandidateInput, options);
       case 'send_touch':
         return this.sendTouch(input as SendTouchInput, options);
+      case 'confirm_application':
+        return this.confirmApplication(input as ConfirmApplicationInput, options);
       default:
         throw new Error(`Jordan: unknown action "${action}"`);
     }
@@ -151,6 +175,18 @@ export class JordanAgent extends BaseAgent {
     if (!lead) throw new Error(`Jordan: lead ${leadId} not found`);
     if (lead.status === 'converted' || lead.status === 'cold') {
       return { skipped: true, reason: `lead is ${lead.status}` };
+    }
+
+    // Recruiting is for pre-application leads only. An applicant's receipt goes
+    // out via confirm_application; re-pitching the application here would ask
+    // them to apply again. Guard sits ahead of channelOverride so a manual
+    // admin/SMS trigger can't route around it.
+    if (hasSubmittedApplication(lead)) {
+      logger.info(
+        { leadId, source: lead.sourceChannel },
+        'Jordan.onboardCandidate: lead already applied — recruitment drip suppressed',
+      );
+      return { skipped: true, reason: 'already_applied' };
     }
 
     // An inbound STOP with no email address leaves nothing we may send. The
@@ -387,6 +423,16 @@ Candidate context: ${safeNotes || 'Calgary mover candidate'}
       return { skipped: true, reason: `lead is ${lead.status}` };
     }
 
+    // See hasSubmittedApplication: no recruitment follow-ups to someone who has
+    // already applied. Catches touches queued before the lead applied, too.
+    if (hasSubmittedApplication(lead)) {
+      logger.info(
+        { leadId, touchNumber, source: lead.sourceChannel },
+        'Jordan.sendTouch: lead already applied — recruitment follow-up suppressed',
+      );
+      return { skipped: true, reason: 'already_applied', touchNumber };
+    }
+
     // An inbound STOP with no email address leaves nothing we may send. The
     // send-time gate already blocks the SMS; skipping here keeps the lead from
     // being picked up, retried and logged every single day.
@@ -540,6 +586,79 @@ Application link: ${applyLink}`,
     };
   }
 
+  /**
+   * Post-submission receipt for a mover application.
+   *
+   * This is what /api/apply/mover enqueues instead of onboard_candidate. It
+   * sends the deterministic confirmation template once and schedules NO
+   * recruitment follow-ups — the applicant is already in the funnel, so the
+   * +24/48/72h drip would only re-pitch the form they just filled in.
+   *
+   * Nova's +24h cold call is kept: it is the "we call or email you" the receipt
+   * promises, and it is a real conversation rather than another apply CTA.
+   */
+  private async confirmApplication(
+    { leadId }: ConfirmApplicationInput,
+    options: AgentRunOptions = {},
+  ) {
+    const lead = await this.getLead(leadId);
+    if (!lead) throw new Error(`Jordan: lead ${leadId} not found`);
+
+    const firstName = (lead.contactName ?? '').trim().split(/\s+/)[0] ?? '';
+    const { subject, html, text } = buildMoverApplicationReceivedEmail({ firstName });
+
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [leadId],
+        preview: {
+          to: lead.contactEmail ?? null,
+          channel: 'email' as const,
+          subject,
+          body: text,
+        },
+      };
+    }
+
+    // Phone-only applicant (the form takes phone OR email): nothing to confirm
+    // to. Fall through rather than returning — Nova's call below is then the
+    // entire follow-up, and dropping it would leave the applicant with nothing.
+    let emailSent = false;
+    if (lead.contactEmail) {
+      emailSent = await sendJordanApplicationEmail(lead.contactEmail, subject, html, text);
+    } else {
+      logger.info({ leadId }, 'Jordan.confirmApplication: applicant has no email — receipt skipped');
+    }
+
+    // Same rule as the drip: only a send the provider accepted advances state.
+    if (emailSent) {
+      await db
+        .update(leads)
+        .set({
+          status: 'contacted',
+          touchpoints: (lead.touchpoints ?? 0) + 1,
+          lastTouchedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, leadId));
+    } else {
+      logger.warn(
+        { leadId, hasEmail: !!lead.contactEmail },
+        'Jordan.confirmApplication: receipt not delivered — leaving lead state unchanged',
+      );
+    }
+
+    await this.scheduleNovaColdCallFollowUp(lead);
+
+    await emitEvent('lead.application_confirmed', 'lead', leadId, {
+      channel: 'email',
+      emailSent,
+      agentName: this.name,
+    });
+
+    return { success: true, channel: 'email' as const, emailSent };
+  }
+
   private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
     if (!lead.contactPhone) return { skipped: true, reason: 'no_contact_phone' };
     const isFirstSms = !(await wasEverSmsed({ entityId: lead.id, entityType: 'lead' }));
@@ -681,6 +800,46 @@ function parseSubjectAndBody(raw: string, fallbackSubject: string): { subject: s
   const subject = lines[subjectIdx].replace(/^\s*SUBJECT:\s*/i, '').trim() || fallbackSubject;
   const body = lines.slice(subjectIdx + 1).join('\n').trim();
   return { subject, body: body || raw.trim() };
+}
+
+/**
+ * Send a pre-rendered Jordan template (html + plain-text already built).
+ *
+ * Separate from sendJordanEmail, which wraps a Claude-written body in the
+ * outreach shell. Sends on the TRANSACTIONAL alias with no List-Unsubscribe:
+ * this is information the applicant asked for seconds earlier, which CASL
+ * treats as solicited, and an unsubscribe link on a receipt reads as if we
+ * had added them to a marketing list.
+ */
+async function sendJordanApplicationEmail(
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+): Promise<boolean> {
+  if (process.env.NODE_ENV === 'development') {
+    logger.info({ to, subject }, 'Jordan: dev mode — application receipt not sent');
+    return false;
+  }
+  if (!resend) {
+    logger.warn('Jordan: RESEND_API_KEY not set — application receipt skipped');
+    return false;
+  }
+  try {
+    await sendResendEmail({
+      from: EMAIL_SENDERS.TRANSACTIONAL,
+      to,
+      replyTo: JORDAN_REPLY_TO,
+      subject,
+      html,
+      text,
+    });
+    logger.info({ to, subject }, 'Jordan: application receipt sent');
+    return true;
+  } catch (err) {
+    logger.error({ err }, 'Jordan: Resend threw on application receipt');
+    return false;
+  }
 }
 
 async function sendJordanEmail(to: string, subject: string, body: string): Promise<boolean> {

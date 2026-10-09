@@ -115,7 +115,15 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("customer");
+  // Honour ?role=mover on the URL. The mover-application receipt
+  // (server/lib/jordanEmailTemplates) links here, and without this the
+  // applicant would land on a customer signup with no hint they picked wrong.
+  // The toggle below still lets them switch; anything but "mover" is customer.
+  const [role, setRole] = useState(() =>
+    new URLSearchParams(window.location.search).get("role") === "mover"
+      ? "mover"
+      : "customer",
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   

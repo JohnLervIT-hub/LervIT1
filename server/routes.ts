@@ -17073,6 +17073,13 @@ Respond with VALID JSON only:
   // on the marketing site (website-standalone). Creates a high-intent
   // recruitment lead (intentScore 90) and hands it to Jordan (VETTER)
   // for immediate onboarding follow-up.
+  //
+  // Jordan gets 'confirm_application', NOT 'onboard_candidate': the latter is
+  // the four-touch recruitment drip, which pitches "Apply to become a LervIT
+  // mover" and links back to /become-a-mover. Sending that to someone who just
+  // submitted the form asks them to do the thing they already did.
+  // hasSubmittedApplication in agents/jordan keeps the drip off these leads on
+  // every other path too (Ryan's router, the event bus, an admin trigger).
   app.post("/api/apply/mover", async (req: Request, res: Response) => {
     try {
       const body = req.body ?? {};
@@ -17129,7 +17136,7 @@ Respond with VALID JSON only:
       const jordanQueue = createAgentQueue(QUEUE_NAMES.VETTER);
       if (jordanQueue) {
         try {
-          await jordanQueue.add('onboard_candidate', { leadId: lead.id });
+          await jordanQueue.add('confirm_application', { leadId: lead.id });
         } catch (queueErr) {
           logger.warn({ err: queueErr, leadId: lead.id }, '[mover_application] jordan enqueue failed');
         }
@@ -17542,7 +17549,11 @@ Respond with VALID JSON only:
       if (!requireAdmin(req, res)) return;
       const { jordan } = await import('./agents/jordan');
       const action = (req.body?.action ?? 'onboard_candidate') as string;
-      if (action === 'onboard_candidate' || action === 'send_touch') {
+      if (
+        action === 'onboard_candidate' ||
+        action === 'send_touch' ||
+        action === 'confirm_application'
+      ) {
         if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
 
         const [lead] = await db
