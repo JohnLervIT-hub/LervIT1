@@ -111,6 +111,7 @@ import { linkedInProvider } from "./providers/linkedin";
 import { reid } from "./agents/reid";
 import {
   deliverApplicationReceipt,
+  hasSubmittedApplication,
   APPLICATION_RECEIPT_RETRY_DELAY_MS,
 } from "./agents/jordan";
 import { documentAudits, documentIrregularities } from "@shared/schema";
@@ -17588,20 +17589,31 @@ Respond with VALID JSON only:
     try {
       if (!requireAdmin(req, res)) return;
       const { jordan } = await import('./agents/jordan');
-      const action = (req.body?.action ?? 'onboard_candidate') as string;
+      const requestedAction = (req.body?.action ?? 'onboard_candidate') as string;
       if (
-        action === 'onboard_candidate' ||
-        action === 'send_touch' ||
-        action === 'confirm_application'
+        requestedAction === 'onboard_candidate' ||
+        requestedAction === 'send_touch' ||
+        requestedAction === 'confirm_application'
       ) {
         if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
 
         const [lead] = await db
-          .select({ leadType: leads.leadType })
+          .select({ leadType: leads.leadType, sourceChannel: leads.sourceChannel })
           .from(leads)
           .where(eq(leads.id, String(req.body.leadId)))
           .limit(1);
         if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+        // The admin UI's "Trigger Jordan" button posts onboard_candidate for
+        // every lead. On an applicant that is the recruitment drip, which
+        // hasSubmittedApplication refuses — so the one manual recovery for a
+        // lead whose receipt failed was a silent skip reported as success.
+        // Resend the receipt instead; the response carries the action that
+        // actually ran.
+        const action =
+          requestedAction === 'onboard_candidate' && hasSubmittedApplication(lead)
+            ? 'confirm_application'
+            : requestedAction;
         // Jordan handles individual movers (b2bm) and unclassified/customer
         // leads that happen to be routed to him. Only B2B fleet partners
         // (b2bp) are Sam's exclusive domain.
@@ -17622,9 +17634,9 @@ Respond with VALID JSON only:
           input.channelOverride = channelOverride;
         }
         const result = await jordan.run(action, input);
-        return res.json({ ok: true, action, result });
+        return res.json({ ok: true, action, requestedAction, result });
       }
-      return res.status(400).json({ error: `Unsupported action: ${action}` });
+      return res.status(400).json({ error: `Unsupported action: ${requestedAction}` });
     } catch (err) {
       logger.error({ err }, '[Admin] jordan/trigger failed');
       res.status(500).json({ error: (err as Error).message });

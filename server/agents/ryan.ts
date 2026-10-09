@@ -16,7 +16,7 @@
  * Jordan Hayes handles first-touch recruitment.
  */
 
-import { and, eq, gte, isNull, isNotNull, like, or } from 'drizzle-orm';
+import { and, eq, gte, isNull, isNotNull, like, notInArray, or } from 'drizzle-orm';
 import { BaseAgent } from './base';
 import { db } from '../db';
 import { leads } from '@shared/schema';
@@ -28,6 +28,7 @@ import { fetchWithScrapingBee } from '../scraping-bee';
 import { parseListingTitles, parseCraigslistDatedItems } from './scout';
 import { searchPlacesText } from './places-crawl';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
+import { APPLIED_SOURCE_CHANNELS } from './jordan';
 
 const RYAN_SCORING_MODEL = 'claude-haiku-4-5-20251001';
 
@@ -213,6 +214,26 @@ export class RyanAgent extends BaseAgent {
           // (Kijiji hides both behind its messaging form). Those rows have no
           // channel Jordan can open, so they must not consume a vetter slot.
           or(isNotNull(leads.contactPhone), isNotNull(leads.contactEmail)),
+          // Mover applicants are past recruiting — they already filled in the
+          // form this sweep's whole purpose is to get people to. They match
+          // every other clause here (status 'new', intentScore 90,
+          // utmCampaign 'ryan-brooks', assignedAgent null), so before this
+          // clause a failed application receipt left them claimable: Ryan
+          // stamped assignedAgent='jordan-hayes', Jordan's
+          // hasSubmittedApplication correctly refused to recruit them, and the
+          // lead was then invisible to this sweep forever (it needs
+          // assignedAgent IS NULL) with nobody having touched it. Their receipt
+          // is Jordan's confirm_application, enqueued by the intake route.
+          //
+          // isNull first because <> / NOT IN yield NULL for a NULL
+          // source_channel, which would silently drop every lead that has no
+          // source — the scraped inserts below do set one, but nothing enforces
+          // it. Shares its list with hasSubmittedApplication so the two cannot
+          // disagree about who counts as an applicant.
+          or(
+            isNull(leads.sourceChannel),
+            notInArray(leads.sourceChannel, [...APPLIED_SOURCE_CHANNELS]),
+          ),
         ),
       );
 

@@ -57,11 +57,13 @@ export const APPLICATION_RECEIPT_RETRY_DELAY_MS = 90_000;
  * enqueued it — the intake route, Ryan's router, the event bus or an admin
  * trigger.
  */
-const APPLIED_SOURCE_CHANNELS: ReadonlySet<string> = new Set(['mover_application']);
+export const APPLIED_SOURCE_CHANNELS = ['mover_application'] as const;
+
+const APPLIED_SOURCE_CHANNEL_SET: ReadonlySet<string> = new Set(APPLIED_SOURCE_CHANNELS);
 
 /** True when the lead already submitted the mover application. */
 export function hasSubmittedApplication(lead: { sourceChannel?: string | null }): boolean {
-  return !!lead.sourceChannel && APPLIED_SOURCE_CHANNELS.has(lead.sourceChannel);
+  return !!lead.sourceChannel && APPLIED_SOURCE_CHANNEL_SET.has(lead.sourceChannel);
 }
 
 export const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
