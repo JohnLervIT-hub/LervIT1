@@ -158,10 +158,10 @@ function formatPhoneNumber(phone: string): string {
  * in Alex's email and the figure on the card come from one implementation
  * instead of two that drift.
  *
- * Access fees are passed through when the caller has them and are the one
- * remaining reason the two brackets can differ: the card knows the access types
- * (step 2 collects them) and adds e.g. +$12 for stairs at BOTH ends, whereas
- * /api/leads/capture is not currently sent them. Every other input matches.
+ * Access fees are passed through when the caller has them, and the quote form
+ * now sends the access types it collected in step 2, so the card and this
+ * bracket agree. They still default to null for any caller that omits them
+ * (older clients, other lead sources), which under-states by the access fee.
  * Item premiums need the photos and so are in neither — this brackets the load,
  * not the invoice, and the copy rendering it stays provisional.
  */
@@ -16987,9 +16987,8 @@ Respond with VALID JSON only:
             // Absent from older clients, hence the items-based fallback below.
             volumeSource?: string | null;
             // Access types, so the bracket here matches the one on the quote
-            // card. The card has had these since step 2; the capture payload
-            // does not send them yet, and until it does the two brackets differ
-            // by exactly the access fee.
+            // card. Sent by the quote form since the step-2 access selects;
+            // still optional because other lead sources never collect them.
             pickupDifficulty?: string | null;
             dropoffDifficulty?: string | null;
           }

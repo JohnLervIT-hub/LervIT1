@@ -486,6 +486,11 @@ export default function RequestMove() {
         numberOfMovers: numberOfMovers ?? 1,
         pickupAddress: pickupAddress || null,
         dropoffAddress: dropoffAddress || null,
+        // Access types, so estimateBracketForLead applies the same stairs /
+        // elevator / long-carry fees the quote card already charges. Without
+        // them the lead email's bracket came out low by exactly the access fee.
+        pickupDifficulty: pickupDifficulty || null,
+        dropoffDifficulty: dropoffDifficulty || null,
       };
 
       const res = await apiRequest("POST", "/api/leads/capture", {
@@ -510,7 +515,7 @@ export default function RequestMove() {
       console.error('Lead capture failed:', err);
       setContactCaptured(true);
     }
-  }, [pickupAddress, dropoffAddress, quoteId, identifiedItems, priceBreakdown, estimateDistance, numberOfMovers]);
+  }, [pickupAddress, dropoffAddress, quoteId, identifiedItems, priceBreakdown, estimateDistance, numberOfMovers, pickupDifficulty, dropoffDifficulty]);
   
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
