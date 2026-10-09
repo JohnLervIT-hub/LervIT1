@@ -36,7 +36,7 @@ export default function PrivacyPolicy() {
           <CardContent className="p-6 sm:p-8">
             <div className="prose prose-sm dark:prose-invert max-w-none" data-testid="privacy-content">
               <h1 className="text-2xl font-bold mb-1">LervIT — Privacy Policy</h1>
-              <p className="text-muted-foreground text-sm mb-6">Last Updated: February 2026</p>
+              <p className="text-muted-foreground text-sm mb-6">Last Updated: October 2026</p>
 
               <p>
                 LervIT ("we", "us", "our") is committed to protecting your privacy. This Privacy Policy explains how we
@@ -140,11 +140,18 @@ export default function PrivacyPolicy() {
               <p>We implement industry-standard security measures to protect your information, including:</p>
               <ul className="list-disc pl-6 space-y-1">
                 <li>Encrypted data transmission (HTTPS/TLS).</li>
-                <li>Secure password hashing (SHA-256).</li>
+                <li>Secure password hashing using bcrypt. Legacy SHA-256 hashes are automatically upgraded to bcrypt on the user's next successful login.</li>
                 <li>Session-based authentication with automatic expiration.</li>
                 <li>Single-session enforcement for administrative accounts.</li>
+                <li>Role-based access controls — all administrative API endpoints are protected at the infrastructure level.</li>
+                <li>Upload validation requiring both file extension and MIME type against a strict allowlist.</li>
+                <li>Rate limiting on email and SMS endpoints to prevent abuse.</li>
+                <li>Content Security Policy (CSP) and Permissions-Policy headers on all responses.</li>
+                <li>Webhook signature verification (HMAC-SHA256) for all third-party platform integrations.</li>
                 <li>Stripe webhook signature verification for payment security.</li>
-                <li>Environment-based access controls for production systems.</li>
+                <li>Sensitive data (including user contact details) excluded from application logs.</li>
+                <li>Dependency vulnerability management with regular patching; critical vulnerabilities are resolved within one release cycle.</li>
+                <li>Production credentials and environment variables are excluded from version control.</li>
               </ul>
               <p>
                 While we take reasonable precautions, no method of electronic transmission or storage is 100% secure.

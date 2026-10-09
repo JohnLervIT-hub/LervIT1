@@ -689,6 +689,17 @@ export class RyanAgent extends BaseAgent {
         logger.warn({ source: opts.source }, 'Ryan: unparseable phone on scraped lead — storing null');
       }
       const contactEmail = email ?? null;
+
+      // Skip leads with no contact info — a lead we can't reach is not
+      // actionable. At least one of phone or email must be present.
+      if (!contactPhone && !contactEmail) {
+        logger.info(
+          { source: opts.source, title: title.slice(0, 60) },
+          'Ryan: skipping — no email or phone found on listing',
+        );
+        continue;
+      }
+
       if (await isContactDuplicate({ phone: contactPhone, email: contactEmail, leadType: 'b2bm' })) {
         logger.info(
           { source: opts.source, hasPhone: !!phone, hasEmail: !!email },

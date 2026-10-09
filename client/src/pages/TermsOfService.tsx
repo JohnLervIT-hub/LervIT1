@@ -36,7 +36,7 @@ export default function TermsOfService() {
           <CardContent className="p-6 sm:p-8">
             <div className="prose prose-sm dark:prose-invert max-w-none" data-testid="terms-content">
               <h1 className="text-2xl font-bold mb-1">LervIT — Platform Terms of Service</h1>
-              <p className="text-muted-foreground text-sm mb-6">Last Updated: February 2026</p>
+              <p className="text-muted-foreground text-sm mb-6">Last Updated: October 2026</p>
 
               <p>
                 Welcome to LervIT. These Terms of Service ("Terms") govern your access to and use of the LervIT platform,
