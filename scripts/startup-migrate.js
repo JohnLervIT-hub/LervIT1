@@ -1,5 +1,5 @@
 /**
- * Runs scripts/sync-schema.sql against DATABASE_URL before the server starts.
+ * Runs DDL migrations against DATABASE_MIGRATION_URL (or DATABASE_URL if unset) before the server starts.
  *
  * sync-schema.sql is idempotent (CREATE TABLE / ADD COLUMN / CREATE INDEX
  * IF NOT EXISTS), so it is safe to run on every deploy.
