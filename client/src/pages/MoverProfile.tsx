@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { PhoneVerification } from "@/components/PhoneVerification";
-import { looksLikeBusinessName, BUSINESS_NAME_WARNING } from "@shared/mover-name";
+import { looksLikeBusinessName, isSingleWordName, BUSINESS_NAME_WARNING, SINGLE_NAME_WARNING } from "@shared/mover-name";
 
 type Mover = {
   id: string;
@@ -499,9 +499,9 @@ export default function MoverProfile() {
                 placeholder="Enter your full name"
                 data-testid="input-mover-profile-name"
               />
-              {looksLikeBusinessName(name) && (
+              {(looksLikeBusinessName(name) || isSingleWordName(name)) && (
                 <p className="text-sm text-amber-700 dark:text-amber-500" aria-live="polite" data-testid="warning-business-name">
-                  {BUSINESS_NAME_WARNING}
+                  {looksLikeBusinessName(name) ? BUSINESS_NAME_WARNING : SINGLE_NAME_WARNING}
                 </p>
               )}
               <p className="text-xs text-muted-foreground">

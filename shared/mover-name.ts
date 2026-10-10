@@ -52,6 +52,21 @@ export function matchedBusinessKeywords(name: string | null | undefined): string
   );
 }
 
+/**
+ * True when a name is a single word after trimming.
+ *
+ * Deliberately a WARNING signal, never a hard block: mononyms are legitimate
+ * legal names in several naming traditions (Indonesian and Tamil among
+ * others), and `users.name` is shared by customers and admins, who have no
+ * verification or payout requirement at all.
+ */
+export function isSingleWordName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return name.trim().split(/\s+/).filter(Boolean).length < 2;
+}
+
+export const SINGLE_NAME_WARNING = 'Please enter both your first and last name.';
+
 export const BUSINESS_NAME_WARNING =
   'This looks like a business name. Please enter your legal first and last name — you can set your business display name separately.';
 
