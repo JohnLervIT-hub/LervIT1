@@ -29,7 +29,7 @@ import { useWakeLock } from "@/hooks/useWakeLock";
 import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, getNextValidStatuses, type BookingStatus } from "@shared/schema";
 import MoveProgressIndicator from "@/components/MoveProgressIndicator";
@@ -216,6 +216,176 @@ function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// End-of-job item manifest. The mover walks the checklist against what is
+// actually on the truck, then signs off once — which texts and emails the
+// customer their receipt. The sign-off is server-side idempotent, so a second
+// tap (or a tap after a dashboard refresh) returns the original timestamp
+// instead of re-sending.
+function ManifestDialog({
+  booking,
+  open,
+  onOpenChange,
+  onSignOff,
+}: {
+  booking: Booking;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSignOff: (bookingId: string, signedOffAt: Date) => void;
+}) {
+  const { toast } = useToast();
+  const [isSigningOff, setIsSigningOff] = useState(false);
+
+  const { data: items, isLoading } = useQuery<IdentifiedItem[]>({
+    queryKey: ['/api/ai/items', booking.id],
+    enabled: open,
+  });
+
+  const completedItems = (items ?? []).filter(
+    (i) => i.processingStatus === 'completed' && i.itemName
+  );
+  const totalVolume = completedItems.reduce(
+    (sum, item) => sum + (parseFloat(item.volumeCuft || '0') || 0),
+    0
+  );
+  const totalWeight = completedItems.reduce(
+    (sum, item) => sum + (parseFloat(item.weightKg || '0') || 0),
+    0
+  );
+
+  const handleSignOff = async () => {
+    setIsSigningOff(true);
+    try {
+      const response = await apiRequest(
+        "POST",
+        `/api/bookings/${booking.id}/manifest-signoff`
+      );
+      const result = await response.json();
+      onSignOff(booking.id, result.signedOffAt ? new Date(result.signedOffAt) : new Date());
+      onOpenChange(false);
+      toast({
+        title: result.alreadySignedOff ? "Already signed off" : "Manifest signed off",
+        description: result.alreadySignedOff
+          ? "The customer already has their receipt for this move."
+          : "The customer has been sent a text and an emailed receipt.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Could not sign off",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSigningOff(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid="dialog-manifest">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Package className="w-5 h-5 text-green-600" />
+            Move Manifest
+          </DialogTitle>
+          <DialogDescription>
+            Check every item against the load, then sign off to send the customer their receipt.
+          </DialogDescription>
+        </DialogHeader>
+
+        {booking.description && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-500">
+                  Customer notes
+                </p>
+                <p className="text-sm text-amber-900 dark:text-amber-100 mt-1 whitespace-pre-wrap break-words">
+                  {booking.description}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="flex items-center gap-3 py-6 justify-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
+            <span className="text-sm text-muted-foreground">Loading manifest...</span>
+          </div>
+        ) : completedItems.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            No AI-detected items on this booking yet.
+          </p>
+        ) : (
+          <>
+            <div className="max-h-[45vh] overflow-y-auto space-y-2 pr-1">
+              {completedItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-muted/40 rounded-xl p-3 flex items-center gap-3"
+                  data-testid={`manifest-item-${item.id}`}
+                >
+                  <div className="w-12 h-12 rounded-lg overflow-hidden ring-1 ring-border flex-shrink-0">
+                    <img
+                      src={item.photoUrl}
+                      alt={item.itemName || 'Item'}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{item.itemName}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {item.volumeCuft && (
+                        <span className="text-xs text-muted-foreground">
+                          {parseFloat(item.volumeCuft).toFixed(1)} ft³
+                        </span>
+                      )}
+                      {item.weightKg && (
+                        <span className="text-xs text-muted-foreground">
+                          {parseFloat(item.weightKg).toFixed(0)} kg
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl bg-muted/60 p-3 flex items-center justify-between">
+              <span className="text-sm font-medium">
+                {completedItems.length} item{completedItems.length === 1 ? '' : 's'}
+              </span>
+              <span className="text-sm font-semibold">
+                {totalVolume.toFixed(1)} ft³ · {totalWeight.toFixed(0)} kg
+              </span>
+            </div>
+          </>
+        )}
+
+        <DialogFooter>
+          <Button
+            onClick={handleSignOff}
+            disabled={isSigningOff || completedItems.length === 0}
+            className="w-full bg-green-600 hover:bg-green-700 text-white"
+            data-testid="button-manifest-signoff"
+          >
+            {isSigningOff ? (
+              "Signing off..."
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Sign Off All &amp; Complete
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -569,6 +739,11 @@ export default function MoverDashboard() {
   }, [overlayJob, overlayCountdown]);
 
   const [cancelJobDialogBookingId, setCancelJobDialogBookingId] = useState<string | null>(null);
+  const [manifestOpenBookingId, setManifestOpenBookingId] = useState<string | null>(null);
+  // Signed-off manifests, by booking id -> time of sign-off. Client-side only:
+  // the server is the real record (a 'manifest.signoff' business event), so a
+  // refresh clears the pill but can never cause a duplicate customer receipt.
+  const [signedOffManifests, setSignedOffManifests] = useState<Map<string, Date>>(new Map());
 
   const moverCancelMutation = useMutation({
     mutationFn: async (bookingId: string) => {
@@ -1520,6 +1695,29 @@ export default function MoverDashboard() {
 
         <Separator />
         <IdentifiedItemsDisplay bookingId={booking.id} />
+
+        {signedOffManifests.has(booking.id) ? (
+          <Button
+            size="sm"
+            disabled
+            className="bg-green-600 text-white hover:bg-green-600 disabled:opacity-100 rounded-full h-7 px-3 text-xs"
+            data-testid={`button-manifest-signed-${booking.id}`}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+            Manifest signed off · {format(signedOffManifests.get(booking.id)!, "HH:mm")}
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setManifestOpenBookingId(booking.id)}
+            className="rounded-full h-7 px-3 text-xs border-green-600 text-green-700 hover:bg-green-50 hover:text-green-800 dark:text-green-500 dark:hover:bg-green-950/40"
+            data-testid={`button-manifest-${booking.id}`}
+          >
+            <Package className="w-3.5 h-3.5 mr-1.5" />
+            Manifest
+          </Button>
+        )}
 
         {/* Move Progress Indicator for active bookings */}
         {(ACTIVE_STATUSES.includes(booking.status as BookingStatus) || booking.status === "in_transit") && (
@@ -2505,6 +2703,24 @@ export default function MoverDashboard() {
         </Tabs>
       </div>
       
+      {/* Move Manifest Dialog */}
+      {(() => {
+        if (!manifestOpenBookingId) return null;
+        const manifestBooking = [...(activeBookings ?? []), ...(availableBookings ?? [])]
+          .find((b) => b.id === manifestOpenBookingId);
+        if (!manifestBooking) return null;
+        return (
+          <ManifestDialog
+            booking={manifestBooking}
+            open={true}
+            onOpenChange={(open) => { if (!open) setManifestOpenBookingId(null); }}
+            onSignOff={(bookingId, signedOffAt) => {
+              setSignedOffManifests((prev) => new Map(prev).set(bookingId, signedOffAt));
+            }}
+          />
+        );
+      })()}
+
       {/* Image Preview Dialog */}
       <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
         <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">

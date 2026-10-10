@@ -114,7 +114,14 @@ export interface SMSNotification {
     // Reply to an inbound HELP keyword. Outside RATE_LIMITED_TYPES because a
     // keyword response is a carrier obligation, not outreach — it must never be
     // dropped by the 1/hr budget. Bounded by the inbound message itself.
-    | 'help_reply';
+    | 'help_reply'
+    // Mover's end-of-job item manifest. Its own type so it sits outside
+    // RATE_LIMITED_TYPES: sign-off happens at completion, by which point the
+    // shared 1/hr 'booking_update' budget is normally already spent by the
+    // arriving-soon and status texts, which would drop this one silently.
+    // Bounded by the once-per-booking 'manifest.signoff' guard in
+    // server/routes.ts.
+    | 'manifest_signoff';
 }
 
 /**

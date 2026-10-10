@@ -53,6 +53,7 @@ import { notifySitemapRegenerate } from "./utils/sitemap";
 import { canvaProvider } from "./providers/canva";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { visionApiLimiter } from "./middleware/security";
+import { escapeHtml } from "./lib/promptSanitizer";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte, lte, ne, ilike } from "drizzle-orm";
@@ -10795,6 +10796,174 @@ Respond with VALID JSON only:
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to complete booking" });
+    }
+  });
+
+  // POST /api/bookings/:id/manifest-signoff - Mover signs off the AI item
+  // manifest at the end of a job; the customer gets an SMS + emailed receipt.
+  //
+  // Once per booking. The sign-off is recorded as a 'manifest.signoff'
+  // business event rather than a bookings column, which keeps the guard
+  // schema-free and does double duty: it bounds the non-rate-limited
+  // 'manifest_signoff' SMS type, and it means a mover who refreshes the
+  // dashboard (losing the client-side signed-off set) and taps again gets the
+  // original timestamp back instead of re-sending a paid SMS and a second
+  // receipt.
+  app.post("/api/bookings/:id/manifest-signoff", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Only the assigned mover may sign off their own job's manifest.
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(403).json({ error: "Mover profile not found" });
+      }
+      const mover = movers[0];
+      if (!booking.moverId || booking.moverId !== mover.id) {
+        return res.status(403).json({ error: "Not authorized for this booking" });
+      }
+
+      // Already signed off — report the original time, send nothing.
+      const [existing] = await db.select({
+        id: businessEvents.id,
+        createdAt: businessEvents.createdAt,
+      })
+        .from(businessEvents)
+        .where(and(
+          eq(businessEvents.eventType, 'manifest.signoff'),
+          eq(businessEvents.entityType, 'booking'),
+          eq(businessEvents.entityId, bookingId),
+        ))
+        .limit(1);
+      if (existing) {
+        return res.json({
+          success: true,
+          alreadySignedOff: true,
+          signedOffAt: existing.createdAt,
+        });
+      }
+
+      const allItems = await storage.getIdentifiedItemsByBooking(bookingId);
+      const items = allItems.filter((i) => i.processingStatus === 'completed' && i.itemName);
+      if (items.length === 0) {
+        return res.status(400).json({ error: "No completed items to sign off" });
+      }
+
+      const totalVolume = items.reduce((sum, i) => sum + (parseFloat(i.volumeCuft || '0') || 0), 0);
+      const totalWeight = items.reduce((sum, i) => sum + (parseFloat(i.weightKg || '0') || 0), 0);
+
+      const customer = await storage.getUser(booking.customerId);
+      const moverUser = await storage.getUser(mover.userId);
+      const moverName = moverUser?.name || 'Your mover';
+      const moveDate = formatCalgaryDate(booking.startedAt ?? booking.preferredDate);
+      const supportUrl = `${getBaseUrl()}/support`;
+
+      // Record the sign-off BEFORE notifying. A duplicate tap that races this
+      // one then loses on the guard above rather than double-texting; a failed
+      // send is recoverable by the customer via support, an unbounded SMS loop
+      // is not.
+      await db.insert(businessEvents).values({
+        eventType: 'manifest.signoff',
+        entityType: 'booking',
+        entityId: bookingId,
+        payload: {
+          moverId: mover.id,
+          itemCount: items.length,
+          totalVolumeCuft: Number(totalVolume.toFixed(1)),
+          totalWeightKg: Number(totalWeight.toFixed(0)),
+        },
+        source: 'system',
+      });
+
+      const signedOffAt = new Date();
+
+      if (customer?.phone) {
+        const itemList = items
+          .map((i) => `• ${i.itemName}${i.volumeCuft ? ` (${parseFloat(i.volumeCuft).toFixed(1)} ft³)` : ''}`)
+          .join('\n');
+        const message = `LervIT: ${moverName} signed off your move manifest.\n\n${itemList}\n\nTotal volume: ${totalVolume.toFixed(1)} ft³\n\nQuestions? ${supportUrl}`;
+        try {
+          await notificationService.sendSMS({
+            to: customer.phone,
+            message,
+            type: 'manifest_signoff',
+          });
+        } catch (smsErr) {
+          console.error('[Manifest] SMS send failed:', smsErr);
+        }
+      }
+
+      if (customer?.email) {
+        const rows = items.map((i) => `
+              <tr>
+                <td style="padding:10px 12px;border-bottom:1px solid #eee;">${escapeHtml(i.itemName)}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">${i.volumeCuft ? `${parseFloat(i.volumeCuft).toFixed(1)} ft³` : '—'}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">${i.weightKg ? `${parseFloat(i.weightKg).toFixed(0)} kg` : '—'}</td>
+              </tr>`).join('');
+
+        const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#1a1a1a;max-width:560px;">
+          <h2 style="font-size:20px;margin:0 0 4px;">Your move manifest</h2>
+          <p style="color:#555;margin:0 0 20px;">${escapeHtml(moverName)} signed off the items below on ${escapeHtml(moveDate)}.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <thead>
+              <tr>
+                <th style="padding:8px 12px;border-bottom:2px solid #ddd;text-align:left;">Item</th>
+                <th style="padding:8px 12px;border-bottom:2px solid #ddd;text-align:right;">Volume</th>
+                <th style="padding:8px 12px;border-bottom:2px solid #ddd;text-align:right;">Weight</th>
+              </tr>
+            </thead>
+            <tbody>${rows}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td style="padding:10px 12px;font-weight:600;">${items.length} item${items.length === 1 ? '' : 's'}</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:600;white-space:nowrap;">${totalVolume.toFixed(1)} ft³</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:600;white-space:nowrap;">${totalWeight.toFixed(0)} kg</td>
+              </tr>
+            </tfoot>
+          </table>
+          <p style="margin:24px 0 0;">Something missing or not right?
+            <a href="${supportUrl}" style="color:#0f766e;">Contact support</a>.
+          </p>
+        </div>`;
+
+        const text = [
+          `Your move manifest`,
+          ``,
+          `${moverName} signed off the items below on ${moveDate}.`,
+          ``,
+          ...items.map((i) => `- ${i.itemName}${i.volumeCuft ? ` — ${parseFloat(i.volumeCuft).toFixed(1)} ft³` : ''}${i.weightKg ? `, ${parseFloat(i.weightKg).toFixed(0)} kg` : ''}`),
+          ``,
+          `${items.length} item${items.length === 1 ? '' : 's'} · ${totalVolume.toFixed(1)} ft³ · ${totalWeight.toFixed(0)} kg`,
+          ``,
+          `Something missing or not right? ${supportUrl}`,
+        ].join('\n');
+
+        try {
+          await sendResendEmail({
+            from: EMAIL_SENDERS.TRANSACTIONAL,
+            replyTo: 'support@lervit.com',
+            to: customer.email,
+            subject: `Your move manifest — ${items.length} item${items.length === 1 ? '' : 's'}, ${totalVolume.toFixed(1)} ft³`,
+            html,
+            text,
+          });
+        } catch (emailErr) {
+          console.error('[Manifest] Email send failed:', emailErr);
+        }
+      }
+
+      res.json({ success: true, signedOffAt, itemCount: items.length });
+    } catch (error) {
+      console.error('[Manifest] Sign-off error:', error);
+      res.status(500).json({ error: "Failed to sign off manifest" });
     }
   });
 
