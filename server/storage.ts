@@ -92,9 +92,12 @@ export interface IStorage {
 /**
  * `users.name` is the legal name that document verification and Stripe payouts
  * match against, so stray whitespace is not cosmetic — it is a mismatch. Trim
- * at the storage layer rather than per route: every write goes through these
- * methods (routes, Firebase auth, admin edits, seeds), so a new caller cannot
- * reintroduce an untrimmed name.
+ * at the storage layer rather than per route: callers that go through these
+ * methods (the signup and profile routes, Firebase auth, the dev seeds) cannot
+ * reintroduce an untrimmed name. PATCH /api/admin/users/:id is the one
+ * exception — it writes usersTable directly — so an admin-set name is stored
+ * verbatim, deliberately: that route is also the override support uses to set
+ * a name this app would otherwise reject.
  *
  * Only touches the key when the caller actually passed a string, so a partial
  * update never resurrects a field it did not mean to set.

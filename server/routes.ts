@@ -54,7 +54,7 @@ import { canvaProvider } from "./providers/canva";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { visionApiLimiter } from "./middleware/security";
 import { escapeHtml } from "./lib/promptSanitizer";
-import { customerFacingMoverName } from "@shared/mover-name";
+import { customerFacingMoverName, isSingleWordName, SINGLE_NAME_WARNING } from "@shared/mover-name";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte, lte, ne, ilike } from "drizzle-orm";
@@ -1238,6 +1238,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phoneVerificationToken: z.string().min(1, "Phone verification required"),
       });
       const { phoneVerificationToken, ...userData } = validateBody(signupSchema, req.body);
+
+      // Movers need a full legal name: it is matched against their verification
+      // documents and the Stripe payout record, and a partial name stalls both.
+      // Role-gated here rather than as a .refine() on insertUserSchema, which
+      // also backs customer signup — customers have no such requirement, and a
+      // mononym can be someone's complete legal name. Admins can still set any
+      // name via PATCH /api/admin/users/:id, which is how support honours one.
+      if (userData.role === 'mover' && isSingleWordName(userData.name)) {
+        return res.status(400).json({ error: SINGLE_NAME_WARNING });
+      }
       
       // Verify the phone verification token
       const { phoneVerificationTokens } = await import("@shared/schema");
@@ -1541,6 +1551,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const updates = validateBody(updateProfileSchema, req.body);
+
+      // Same rule as signup, and only when this request actually carries a
+      // name: the notification-preference and avatar saves PATCH this route
+      // too, and a single-name mover must still be able to use those.
+      if (user.role === 'mover' && updates.name !== undefined && isSingleWordName(updates.name)) {
+        return res.status(400).json({ error: SINGLE_NAME_WARNING });
+      }
+
       const updatedUser = await storage.updateUser(user.id, updates);
       
       if (!updatedUser) {
