@@ -5,6 +5,10 @@
 // links (Google, Bing, social) continue to resolve.
 //
 // Usage: npx tsx scripts/seed-blog-from-marketing.ts
+//        npx tsx scripts/seed-blog-from-marketing.ts --slug=<slug>   # one post
+//
+// --slug narrows the run to a single post. Adding one post should not rewrite
+// the other rows, which matters because the upsert below overwrites `image`.
 
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
@@ -33,6 +37,17 @@ type MarketingPost = {
   oldPath: string;
 };
 
+// The JSON carries site-relative image paths, but the images are hosted on the
+// marketing site, not the app — so a relative path 404s on app.lervit.com.
+// Migration 0043 rewrites them on boot; normalising here too means a re-run of
+// this seed writes the same absolute URL instead of reverting every row to a
+// relative path that stays broken until the next deploy.
+const MARKETING_ORIGIN = 'https://lervit.com';
+
+function toAbsoluteImage(image: string): string {
+  return image.startsWith('/') ? `${MARKETING_ORIGIN}${image}` : image;
+}
+
 function sectionsToMarkdown(sections: MarketingPost['sections']): string {
   return sections
     .map(s => `## ${s.h2}\n\n${s.paragraphs.join('\n\n')}`)
@@ -41,7 +56,15 @@ function sectionsToMarkdown(sections: MarketingPost['sections']): string {
 
 async function seed() {
   const raw = readFileSync(DATA_PATH, 'utf8');
-  const posts = JSON.parse(raw) as MarketingPost[];
+  const all = JSON.parse(raw) as MarketingPost[];
+
+  const slugArg = process.argv.find(a => a.startsWith('--slug='))?.slice('--slug='.length);
+  const posts = slugArg ? all.filter(p => p.slug === slugArg) : all;
+  if (slugArg && posts.length === 0) {
+    console.error(`No post in ${DATA_PATH} with slug "${slugArg}"`);
+    process.exit(1);
+  }
+  if (slugArg) console.log(`Seeding single post: ${slugArg}`);
 
   let inserted = 0;
   let updated = 0;
@@ -63,7 +86,7 @@ async function seed() {
       topCta: post.topCta,
       bottomCta: post.bottomCta,
       related: post.related,
-      image: post.image,
+      image: toAbsoluteImage(post.image),
       readTime: post.readTime,
       oldPath: post.oldPath,
     };

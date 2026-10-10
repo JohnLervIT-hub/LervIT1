@@ -1534,5 +1534,82 @@
       "should-you-tip-movers-calgary"
     ],
     "oldPath": "/help/safety-trust/rating-movers"
+  },
+  {
+    "slug": "one-photo-per-item-moving-quote-calgary",
+    "title": "Why One Photo Per Item Gets You a Better Moving Quote",
+    "metaTitle": "Why One Photo Per Item Gets You a Better Moving Quote | Lervit",
+    "metaDescription": "Upload one photo per item and let Lervit's AI measure each one accurately. Better photos mean a tighter Calgary moving quote and no surprises on moving day.",
+    "category": "Getting Started",
+    "readTime": "2 min read",
+    "image": "/assets/stock_images/person_photographing_e4aaa67b.jpg",
+    "publishDate": "2026-10-10",
+    "excerpt": "Upload one photo per item and let our AI measure each one accurately — better photos mean a tighter quote and no surprises on moving day.",
+    "sections": [
+      {
+        "h2": "How LervIT Reads Your Photos",
+        "paragraphs": [
+          "Getting an accurate moving quote starts with your photos. LervIT uses AI to analyse each image you upload — measuring dimensions, estimating weight, and flagging items that need special handling. Here's how to get the most from it."
+        ]
+      },
+      {
+        "h2": "Upload One Item Per Photo",
+        "paragraphs": [
+          "When two or more items appear in the same photo, the AI identifies the most prominent one. That works well for a room of boxes, but a sofa and armchair in the same frame will likely be counted as one item. Upload them separately and both get measured, named, and priced correctly."
+        ]
+      },
+      {
+        "h2": "Fill the Frame",
+        "paragraphs": [
+          "Step close enough that the item takes up most of the photo. A small object photographed from across the room gives the AI less to work with and can produce a volume estimate that undershoots — which means a quote that doesn't reflect the real job."
+        ]
+      },
+      {
+        "h2": "Include an Awkward Angle",
+        "paragraphs": [
+          "For large items like sectionals, beds, or appliances, a second photo from the side helps confirm depth. One front shot and one side shot is enough."
+        ]
+      },
+      {
+        "h2": "Don't Forget the Easy Misses",
+        "paragraphs": [
+          "Garage equipment, gym gear, patio furniture, and items in storage are easy to skip. Each one you add gives your mover an accurate picture and reduces the chance of delays or extra charges on the day.",
+          "More photos, taken individually, produce a tighter quote — and a tighter quote means fewer surprises for you and a smoother day for your mover."
+        ]
+      }
+    ],
+    "faq": [
+      {
+        "q": "Should I photograph each item separately or take room shots?",
+        "a": "Separately, for anything that isn't a box. A frame containing several pieces of furniture is read as the most prominent item, so the rest go unpriced. A room of packed moving boxes is the exception — those are counted together."
+      },
+      {
+        "q": "How close should I get to each item?",
+        "a": "Close enough that the item fills most of the frame. A small object shot from across the room gives the AI less to measure and can undershoot the volume estimate."
+      },
+      {
+        "q": "Do I need more than one photo of a large item?",
+        "a": "For sectionals, beds, and appliances, add a second shot from the side so depth can be confirmed. One front and one side photo is enough."
+      },
+      {
+        "q": "What happens if I miss something?",
+        "a": "Anything not in your photos isn't in your quote, so it gets priced on the day. Garage equipment, gym gear, patio furniture, and items in storage are the most commonly forgotten."
+      }
+    ],
+    "topCta": {
+      "text": "Get an accurate quote from your photos",
+      "href": "https://app.lervit.com"
+    },
+    "bottomCta": {
+      "text": "Photograph your items and get an instant quote",
+      "sub": "Accurate Calgary moving quotes in under 2 minutes — no estimates, no surprises.",
+      "href": "https://app.lervit.com"
+    },
+    "related": [
+      "how-to-take-photos-for-moving-quotes-calgary",
+      "how-lervit-uses-ai-for-moving-quotes-calgary",
+      "why-moving-quotes-change-calgary"
+    ],
+    "oldPath": "/help/getting-started/one-photo-per-item"
   }
 ]

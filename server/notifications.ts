@@ -1335,6 +1335,17 @@ class NotificationService {
                     <a href="${dashboardUrl}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block;">Start Your First Move</a>
                   </td>
                 </tr>
+              </table>
+
+              <!-- Photo tips callout -->
+              <table width="100%" style="margin-bottom:25px;">
+                <tr>
+                  <td style="padding:15px;background-color:#f1f8f2;border-radius:8px;border-left:4px solid #4CAF50;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">📸 Get a tighter quote</h3>
+                    <p style="color:#666666;margin:0 0 10px 0;font-size:14px;">Upload one photo per item and our AI measures each one accurately — fewer surprises on moving day.</p>
+                    <a href="${baseUrl}/blog/one-photo-per-item-moving-quote-calgary" style="color:#2E7D32;font-size:14px;font-weight:bold;text-decoration:none;">Read the photo guide →</a>
+                  </td>
+                </tr>
               </table>`;
     
     // Mover-specific content
