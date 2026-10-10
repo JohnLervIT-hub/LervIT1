@@ -285,8 +285,8 @@ export function derivePremiumKey(
   if (/\btreadmill\b/.test(n)) return 'treadmill';
   if (/\bexercise bike\b|\bstationary bike\b|\bpeloton\b/.test(n)) return 'exercise_bike';
   if (/\belliptical\b/.test(n)) return 'elliptical';
-  if (/\bsofa bed\b|\bsleeper sofa\b|\bsleeper couch\b|\bpull.out\b/.test(n)) return 'sofa_bed';
   if (/\bsectional\b/.test(n) || (c === 'sofa' && s.includes('sectional'))) return 'sectional_sofa';
+  if (/\bsofa bed\b|\bsleeper sofa\b|\bsleeper couch\b|\bpull[-\s]?out\b/.test(n)) return 'sofa_bed';
   if (/\bking\b.*\bmattress\b|\bking mattress\b/.test(n)) return 'king_mattress';
   if (/\bkayak\b/.test(n)) return 'kayak';
   if (/\bcanoe\b/.test(n)) return 'canoe';
