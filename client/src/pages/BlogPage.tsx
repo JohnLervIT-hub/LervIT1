@@ -11,12 +11,15 @@ interface BlogPost {
   category: string | null;
   tags: string[] | null;
   image: string | null;
-  readTime: number | null;
+  // Text, not a number: the column stores the whole label ("2 min read").
+  readTime: string | null;
   publishedAt: string | null;
 }
 
 interface BlogPostFull extends BlogPost {
   content: string;
+  sections: { h2: string; paragraphs: string[] }[] | null;
+  faq: { q: string; a: string }[] | null;
   author: string | null;
 }
 
@@ -73,14 +76,42 @@ function PostView({ slug }: { slug: string }) {
 
       <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8">
         <span className="flex items-center gap-1"><Calendar className="w-4 h-4" />{formatDate(post.publishedAt)}</span>
-        {post.readTime && <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{post.readTime} min read</span>}
+        {post.readTime && <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{post.readTime}</span>}
         {post.author && <span>By {post.author}</span>}
       </div>
 
-      <div
-        className="prose prose-neutral max-w-none dark:prose-invert"
-        dangerouslySetInnerHTML={{ __html: post.content }}
-      />
+      {post.sections?.length ? (
+        <>
+          {post.sections.map((section, si) => (
+            <section key={si} className="mb-8">
+              <h2 className="text-2xl font-bold mb-4 leading-tight">{section.h2}</h2>
+              {section.paragraphs.map((para, pi) => (
+                <p key={pi} className="text-muted-foreground leading-relaxed mb-4">{para}</p>
+              ))}
+            </section>
+          ))}
+
+          {!!post.faq?.length && (
+            <section className="mt-10">
+              <h2 className="text-2xl font-bold mb-6 leading-tight">Frequently Asked Questions</h2>
+              {post.faq.map((item, i) => (
+                <div key={i} className="mb-6">
+                  <h3 className="font-semibold mb-1">{item.q}</h3>
+                  <p className="text-muted-foreground leading-relaxed">{item.a}</p>
+                </div>
+              ))}
+            </section>
+          )}
+        </>
+      ) : (
+        // Fallback for a row saved without `sections`. Split on blank lines and
+        // render as text — still never as HTML.
+        post.content.split(/\n{2,}/).map((para, i) => (
+          <p key={i} className="text-muted-foreground leading-relaxed mb-4 whitespace-pre-wrap">
+            {para.replace(/^#{1,6}\s+/, '')}
+          </p>
+        ))
+      )}
     </article>
   );
 }
@@ -123,7 +154,7 @@ function ArchiveList() {
                   {p.excerpt && <p className="text-sm text-muted-foreground line-clamp-3 flex-1">{p.excerpt}</p>}
                   <div className="flex items-center gap-3 mt-4 text-xs text-muted-foreground">
                     <span>{formatDate(p.publishedAt)}</span>
-                    {p.readTime && <span>{p.readTime} min read</span>}
+                    {p.readTime && <span>{p.readTime}</span>}
                   </div>
                 </div>
               </article>
