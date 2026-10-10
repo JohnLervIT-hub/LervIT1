@@ -124,6 +124,7 @@ export const PRICING_CONFIG = {
     treadmill:         10.00,
     exercise_bike:     10.00,
     elliptical:        10.00,
+    sofa_bed:          10.00,
     sectional_sofa:    10.00,
     king_mattress:     10.00,
     kayak:             10.00,
