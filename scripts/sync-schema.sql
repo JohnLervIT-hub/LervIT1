@@ -1784,3 +1784,22 @@ UPDATE blog_posts
 -- would make every existing mover look like they had chosen a display name.
 ALTER TABLE movers
   ADD COLUMN IF NOT EXISTS display_name text;
+
+-- ===== 0045: trim whitespace on mover/user names =====
+-- Mirrors migrations/0045_trim_name_whitespace.sql.
+-- users.name is the LEGAL name matched against verification documents and the
+-- Stripe payout record, so a stray leading/trailing space is a real mismatch,
+-- not cosmetic. Found in production as "Stampede Junk Removal " (trailing
+-- space). Writes are trimmed at the storage layer (server/storage.ts); this
+-- cleans the rows that predate that.
+-- Idempotent: a trimmed row stops matching the WHERE.
+UPDATE users
+   SET name = TRIM(name)
+ WHERE name <> TRIM(name);
+
+-- Same for the mover's customer-facing display name. Whitespace-only collapses
+-- to NULL, which is the meaningful "fall back to the legal name" state.
+UPDATE movers
+   SET display_name = NULLIF(TRIM(display_name), '')
+ WHERE display_name IS NOT NULL
+   AND display_name <> COALESCE(NULLIF(TRIM(display_name), ''), '');

@@ -346,7 +346,12 @@ export default function MoverProfile() {
   };
 
   const handleSaveProfile = () => {
-    updateProfileMutation.mutate({ name, phone, address });
+    // Trim before it leaves the client as well as server-side: the legal name
+    // is matched against verification documents and the payout record, so the
+    // mover should see the stored value, not a silently different one.
+    const trimmedName = name.trim();
+    if (trimmedName !== name) setName(trimmedName);
+    updateProfileMutation.mutate({ name: trimmedName, phone: phone.trim(), address: address.trim() });
     if (moverData && (moverData.displayName ?? "") !== displayName.trim()) {
       updateDisplayNameMutation.mutate(displayName);
     }

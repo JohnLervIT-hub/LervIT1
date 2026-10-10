@@ -89,6 +89,32 @@ export interface IStorage {
   markAllNotificationsAsRead(userId: string): Promise<void>;
 }
 
+/**
+ * `users.name` is the legal name that document verification and Stripe payouts
+ * match against, so stray whitespace is not cosmetic — it is a mismatch. Trim
+ * at the storage layer rather than per route: every write goes through these
+ * methods (routes, Firebase auth, admin edits, seeds), so a new caller cannot
+ * reintroduce an untrimmed name.
+ *
+ * Only touches the key when the caller actually passed a string, so a partial
+ * update never resurrects a field it did not mean to set.
+ */
+function trimUserName<T extends { name?: string | null }>(values: T): T {
+  if (typeof values.name !== 'string') return values;
+  return { ...values, name: values.name.trim() };
+}
+
+/**
+ * Same for the mover's customer-facing display name, with one difference: an
+ * empty or whitespace-only value collapses to NULL, which is the meaningful
+ * "fall back to the legal name" state that customerFacingMoverName() reads.
+ */
+function trimDisplayName<T extends { displayName?: string | null }>(values: T): T {
+  if (typeof values.displayName !== 'string') return values;
+  const trimmed = values.displayName.trim();
+  return { ...values, displayName: trimmed === '' ? null : trimmed };
+}
+
 class PostgresStorage implements IStorage {
   // Users
   async getUser(id: string): Promise<User | undefined> {
@@ -141,12 +167,12 @@ class PostgresStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(insertUser).returning();
+    const result = await db.insert(users).values(trimUserName(insertUser)).returning();
     return result[0];
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
-    const result = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+    const result = await db.update(users).set(trimUserName(updates)).where(eq(users.id, id)).returning();
     return result[0];
   }
 
@@ -183,7 +209,7 @@ class PostgresStorage implements IStorage {
   }
 
   async updateMover(id: string, updates: Partial<Mover>): Promise<Mover | undefined> {
-    const result = await db.update(movers).set(updates).where(eq(movers.id, id)).returning();
+    const result = await db.update(movers).set(trimDisplayName(updates)).where(eq(movers.id, id)).returning();
     return result[0];
   }
 

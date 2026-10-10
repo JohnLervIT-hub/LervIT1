@@ -1524,7 +1524,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = (req as any).user;
       
       const updateProfileSchema = z.object({
-        name: z.string().min(1).optional(),
+        // .trim() before .min(1) so a whitespace-only name is rejected here
+        // rather than trimmed to '' and hitting the NOT NULL at the database.
+        name: z.string().trim().min(1).optional(),
         phone: z.string().optional(),
         address: z.string().optional(),
         hasCompletedOnboarding: z.boolean().optional(),

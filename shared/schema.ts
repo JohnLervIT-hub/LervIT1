@@ -375,6 +375,11 @@ export const insertUserSchema = createInsertSchema(users).omit({
   emailVerified: true,
   verificationToken: true,
   verificationTokenExpiry: true,
+}).extend({
+  // This schema validates the signup request body, so the trim has to happen
+  // here to reject a whitespace-only name instead of storing ' '. The storage
+  // layer trims again for callers that bypass this schema.
+  name: z.string().trim().min(1),
 });
 
 export const insertMoverSchema = createInsertSchema(movers).omit({
