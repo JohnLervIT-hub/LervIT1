@@ -1775,3 +1775,12 @@ CREATE INDEX IF NOT EXISTS bookings_pre_move_reminder_idx
 UPDATE blog_posts
    SET image = 'https://lervit.com' || image
  WHERE image LIKE '/%';
+
+-- ===== 0044: mover customer-facing display name =====
+-- Mirrors migrations/0044_movers_display_name.sql. startup-migrate.js runs only
+-- this file, never migrations/, so the DDL must be here too.
+-- Nullable with no DEFAULT on purpose: NULL is the meaningful "fall back to the
+-- legal users.name" state, which customerFacingMoverName() reads. A default
+-- would make every existing mover look like they had chosen a display name.
+ALTER TABLE movers
+  ADD COLUMN IF NOT EXISTS display_name text;

@@ -54,6 +54,7 @@ import { canvaProvider } from "./providers/canva";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { visionApiLimiter } from "./middleware/security";
 import { escapeHtml } from "./lib/promptSanitizer";
+import { customerFacingMoverName } from "@shared/mover-name";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte, lte, ne, ilike } from "drizzle-orm";
@@ -2386,7 +2387,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isLiveLocation,
             user: user
               ? {
-                  name: user.name,
+                  // Customers browse on the display name; admins reviewing the
+                  // same route still need the legal name for verification.
+                  name: requesterIsAdmin ? user.name : customerFacingMoverName(mover, user),
                   ...(requesterIsAdmin ? { email: user.email, phone: user.phone } : {}),
                 }
               : null,
@@ -2608,6 +2611,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vehiclePhoto: true,
         moverImage: true,
         onboardingCompleted: true,
+        displayName: true,
       });
       const updates = validateBody(updateSchema, req.body);
 
@@ -5179,7 +5183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             mover: mover && moverUser ? {
               id: mover.id,
               userId: moverUser.id,
-              name: moverUser.name,
+              name: customerFacingMoverName(mover, moverUser),
               phone: moverUser.phone,
               moverImage: mover.moverImage,
               vehicleType: mover.vehicleType,
@@ -5294,7 +5298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
         mover: mover && moverUser ? {
           id: mover.id,
-          name: moverUser.name,
+          name: customerFacingMoverName(mover, moverUser),
           phone: moverUser.phone,
           moverImage: mover.moverImage,
           vehicleType: mover.vehicleType,
@@ -11685,7 +11689,7 @@ Respond with VALID JSON only:
           return {
             id: mover.id,
             userId: mover.userId,
-            name: moverUser?.name || 'Unknown',
+            name: customerFacingMoverName(mover, moverUser, 'Unknown'),
             phone: moverUser?.phone || '',
             vehicleType: mover.vehicleType,
             vehicleClass,
@@ -11798,7 +11802,7 @@ Respond with VALID JSON only:
         if (mover) {
           const moverUser = await storage.getUser(mover.userId);
           moverData = {
-            name: moverUser?.name || "Your mover",
+            name: customerFacingMoverName(mover, moverUser),
             phone: moverUser?.phone || "",
             vehicleType: mover.vehicleType || "",
             rating: mover.rating ?? 0,

@@ -11,6 +11,7 @@ import { FormFieldError } from "@/components/FormFieldError";
 import { Truck, Eye, EyeOff, Loader2, Package, Users, Phone, ArrowLeft, CheckCircle, Mail } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
+import { looksLikeBusinessName, BUSINESS_NAME_WARNING } from "@shared/mover-name";
 
 function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
   const glowClass =
@@ -168,6 +169,14 @@ export default function Signup() {
   const getNameHint = (): string | undefined => {
     if (!touched.name || getFieldError('name')) return undefined;
     return name.trim().includes(' ') ? undefined : 'Tip: adding a last name helps movers recognise you.';
+  };
+
+  // Movers registered under a business name fail document verification and
+  // Stripe payouts, both of which match the legal name. Warn only — a mover
+  // whose legal surname really is "Brothers" must still be able to sign up.
+  const getBusinessNameWarning = (): string | undefined => {
+    if (role !== 'mover' || !touched.name || getFieldError('name')) return undefined;
+    return looksLikeBusinessName(name) ? BUSINESS_NAME_WARNING : undefined;
   };
 
   const handleBlur = (field: string) => {
@@ -677,9 +686,14 @@ export default function Signup() {
                 className={`h-11 ${getFieldError('name') ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                 data-testid="input-name"
                 aria-invalid={!!getFieldError('name')}
-                aria-describedby={[getFieldError('name') && 'name-error', getNameHint() && 'name-hint'].filter(Boolean).join(' ') || undefined}
+                aria-describedby={[getFieldError('name') && 'name-error', getBusinessNameWarning() && 'name-business-warning', getNameHint() && 'name-hint'].filter(Boolean).join(' ') || undefined}
               />
               <FormFieldError id="name-error" message={getFieldError('name')} />
+              {getBusinessNameWarning() && (
+                <p id="name-business-warning" className="text-sm text-amber-700 dark:text-amber-500 mt-1.5" aria-live="polite" data-testid="warning-business-name">
+                  {getBusinessNameWarning()}
+                </p>
+              )}
               {getNameHint() && (
                 <p id="name-hint" className="text-sm text-muted-foreground mt-1.5" aria-live="polite">
                   {getNameHint()}

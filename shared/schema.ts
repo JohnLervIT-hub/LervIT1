@@ -109,6 +109,12 @@ export const movers = pgTable("movers", {
   pilotNotes: text("pilot_notes"),
   pilotExpiresAt: timestamp("pilot_expires_at"),
   onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+  // Customer-facing business name. `users.name` stays the mover's LEGAL name
+  // because document verification and Stripe payouts match against it; this is
+  // what the job card and booking confirmation show instead when set. Null
+  // means "use the legal name" — see customerFacingMoverName() in
+  // shared/mover-name.ts.
+  displayName: text("display_name"),
   // Profile completion reminder tracking
   profileReminderCount: integer("profile_reminder_count").default(0).notNull(),
   lastProfileReminderAt: timestamp("last_profile_reminder_at"),

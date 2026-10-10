@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { PhoneVerification } from "@/components/PhoneVerification";
+import { looksLikeBusinessName, BUSINESS_NAME_WARNING } from "@shared/mover-name";
 
 type Mover = {
   id: string;
@@ -51,6 +52,7 @@ type Mover = {
   profileVerified: boolean;
   documentsVerified: boolean;
   moverImage?: string;
+  displayName?: string | null;
 };
 
 type NotificationSettings = {
@@ -169,6 +171,7 @@ export default function MoverProfile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [name, setName] = useState(user?.name || "");
+  const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState(user?.phone || "");
   const [address, setAddress] = useState(user?.address || "");
   const [isUploading, setIsUploading] = useState(false);
@@ -188,6 +191,26 @@ export default function MoverProfile() {
   const { data: moverData } = useQuery<Mover>({
     queryKey: ["/api/movers/me"],
     enabled: !!user,
+  });
+
+  // Seed the display-name input once the mover record lands. Keyed on the
+  // mover id so it refills after a profile switch but never clobbers what the
+  // mover is mid-way through typing.
+  useEffect(() => {
+    if (moverData) setDisplayName(moverData.displayName ?? "");
+  }, [moverData?.id]);
+
+  const updateDisplayNameMutation = useMutation({
+    mutationFn: async (value: string) => {
+      if (!moverData?.id) throw new Error("Mover profile not loaded");
+      // Empty input means "use my legal name", which is NULL in the column.
+      return apiRequest("PATCH", `/api/movers/${moverData.id}`, {
+        displayName: value.trim() || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers/me"] });
+    },
   });
 
   const updateProfileMutation = useMutation({
@@ -324,6 +347,9 @@ export default function MoverProfile() {
 
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({ name, phone, address });
+    if (moverData && (moverData.displayName ?? "") !== displayName.trim()) {
+      updateDisplayNameMutation.mutate(displayName);
+    }
   };
 
   // Mutation to save notification preferences to database
@@ -460,7 +486,7 @@ export default function MoverProfile() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">Legal Full Name</Label>
               <Input
                 id="name"
                 value={name}
@@ -468,6 +494,28 @@ export default function MoverProfile() {
                 placeholder="Enter your full name"
                 data-testid="input-mover-profile-name"
               />
+              {looksLikeBusinessName(name) && (
+                <p className="text-sm text-amber-700 dark:text-amber-500" aria-live="polite" data-testid="warning-business-name">
+                  {BUSINESS_NAME_WARNING}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Must match your ID — document verification and payouts are checked against this name.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="displayName">Business / display name</Label>
+              <Input
+                id="displayName"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="e.g. Calgary Junk Removal"
+                data-testid="input-mover-profile-display-name"
+              />
+              <p className="text-xs text-muted-foreground">
+                This is shown to customers. Leave blank to use your legal name.
+              </p>
             </div>
             
             <div className="space-y-2">
