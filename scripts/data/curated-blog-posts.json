@@ -165,7 +165,8 @@
       {
         "h2": "Room-by-Room Photo Guide",
         "paragraphs": [
-          "Start with room overviews. Stand in a corner of each room and take a wide shot that captures as much of the space as possible. This gives the AI both a count of items and a sense of their relative sizes. Do this for every room including bedrooms, living areas, and the kitchen.",
+          "Start with the packed boxes. For a room where everything is already in boxes, a wide shot from the corner works well — the system counts boxes and luggage across the whole frame, so a photo of ten labelled boxes is read as ten items rather than one. Do this for every packed room including bedrooms, living areas, and the kitchen.",
+          "Furniture works the other way around. When a single wide shot contains several pieces — a sofa, an armchair, and a coffee table in one frame — the system identifies the most prominent item and the others go unpriced. Photograph each piece of furniture on its own so every item gets measured, named, and included in your quote.",
           "Follow up with close-ups of large or unusual items. A sectional sofa, a king-size mattress, a treadmill, a large wardrobe — these items benefit from dedicated close-up shots so the system can accurately gauge their dimensions.",
           "Don't forget storage spaces. Closets, garages, storage lockers, and attic spaces are frequently missed. A photo of a packed closet or a garage full of boxes can significantly affect your quote. If those items aren't in your photos, they won't be in your price.",
           "For outdoor items — patio furniture, a BBQ, potted plants, garden equipment — take photos from outside or in your backyard. These items are often overlooked until moving day."
@@ -176,7 +177,7 @@
         "paragraphs": [
           "Use natural daylight when possible. Open blinds and curtains before taking photos. Bright, even lighting helps the AI distinguish items from shadows and walls, leading to more accurate identification.",
           "Avoid shooting directly into bright windows or light sources. This creates silhouettes that are difficult for the system to analyze. If a room has strong backlighting, face away from the window when shooting.",
-          "For best results, take photos from eye level at a corner angle. This perspective shows the depth and width of the room simultaneously, giving the AI the most information in a single shot.",
+          "For best results, shoot at eye level and step close enough that the item fills most of the frame. A piece photographed from across the room gives the system less to measure. The corner-angle room shot is still the right choice for packed boxes, where the count matters more than the dimensions of any one item.",
           "Steady, sharp photos are important. Blurry images reduce identification accuracy. Use both hands to hold your phone, or lean against a wall to stabilize yourself before taking the shot."
         ]
       }
@@ -184,7 +185,7 @@
     "faq": [
       {
         "q": "How many photos should I take?",
-        "a": "At minimum, one corner-angle overview per room plus close-ups of any large, heavy, or unusual items. For a 2-bedroom apartment, most customers take 10–20 photos total."
+        "a": "One photo per piece of furniture, plus a corner-angle shot of each room of packed boxes. For a 2-bedroom apartment, most customers take 10–20 photos total."
       },
       {
         "q": "What if I have items I don't want to move?",
